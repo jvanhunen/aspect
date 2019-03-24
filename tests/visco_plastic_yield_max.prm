@@ -106,7 +106,6 @@ subsection Postprocess
   set List of postprocessors = visualization, velocity statistics, mass flux statistics
 
   subsection Visualization
-    set Interpolate output = false
     set List of output variables      = strain rate, viscosity
     set Output format                 = gnuplot
     set Time between graphical output = 0.25e6

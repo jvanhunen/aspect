@@ -82,7 +82,6 @@ subsection Postprocess
 
    
 subsection Visualization
-    set Interpolate output = false
     set Output format                 = gnuplot
     set List of output variables      = density, viscosity, gravity
 

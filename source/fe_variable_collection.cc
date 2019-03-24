@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2016 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2016 - 2017 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -80,8 +80,6 @@ namespace aspect
       vector_extractor ( (this->n_components()==dim) ? component_index : -1)
   {}
 
-
-
   template <int dim>
   const FEValuesExtractors::Scalar &
   FEVariable<dim>::extractor_scalar() const
@@ -90,8 +88,6 @@ namespace aspect
            ExcMessage("You cannot ask for the scalar extractor of a non-scalar variable."));
     return scalar_extractor;
   }
-
-
 
   template <int dim>
   const FEValuesExtractors::Vector &
@@ -109,13 +105,11 @@ namespace aspect
   {}
 
 
-
   template <int dim>
   FEVariableCollection<dim>::FEVariableCollection(const std::vector<VariableDeclaration<dim> > &variable_definitions)
   {
     initialize(variable_definitions);
   }
-
 
 
   template <int dim>

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2019 by the authors of the ASPECT code.
+ Copyright (C) 2016 - 2017 by the authors of the ASPECT code.
 
  This file is part of ASPECT.
 
@@ -24,8 +24,6 @@
 #include <aspect/global.h>
 
 #include <deal.II/base/array_view.h>
-
-#if !DEAL_II_VERSION_GTE(9,0,0)
 
 namespace aspect
 {
@@ -100,5 +98,4 @@ namespace aspect
   }
 }
 
-#endif
 #endif

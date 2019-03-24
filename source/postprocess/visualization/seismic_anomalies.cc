@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -82,7 +82,8 @@ namespace aspect
                     in.reinit(fe_values, cell, this->introspection(), this->get_solution(), false);
 
                     out.additional_outputs.push_back(
-                      std::make_shared<MaterialModel::SeismicAdditionalOutputs<dim>> (n_q_points));
+                      std::shared_ptr<MaterialModel::AdditionalMaterialOutputs<dim> >
+                      (new MaterialModel::SeismicAdditionalOutputs<dim> (n_q_points)));
                     this->get_material_model().evaluate(in, out);
 
 
@@ -93,7 +94,8 @@ namespace aspect
                     in.pressure[0]=this->get_adiabatic_conditions().pressure(in.position[0]);
 
                     adiabatic_out.additional_outputs.push_back(
-                      std::make_shared<MaterialModel::SeismicAdditionalOutputs<dim>> (n_q_points));
+                      std::shared_ptr<MaterialModel::AdditionalMaterialOutputs<dim> >
+                      (new MaterialModel::SeismicAdditionalOutputs<dim> (n_q_points)));
                     this->get_material_model().evaluate(in, adiabatic_out);
 
 
@@ -169,7 +171,8 @@ namespace aspect
                     in.current_cell = cell;
 
                     out.additional_outputs.push_back(
-                      std::make_shared<MaterialModel::SeismicAdditionalOutputs<dim>> (n_q_points));
+                      std::shared_ptr<MaterialModel::AdditionalMaterialOutputs<dim> >
+                      (new MaterialModel::SeismicAdditionalOutputs<dim> (n_q_points)));
                     this->get_material_model().evaluate(in, out);
 
                     MaterialModel::SeismicAdditionalOutputs<dim> *seismic_outputs
@@ -249,7 +252,8 @@ namespace aspect
                     in.reinit(fe_values, cell, this->introspection(), this->get_solution(), false);
 
                     out.additional_outputs.push_back(
-                      std::make_shared<MaterialModel::SeismicAdditionalOutputs<dim>>(n_q_points));
+                      std::shared_ptr<MaterialModel::AdditionalMaterialOutputs<dim> >
+                      (new MaterialModel::SeismicAdditionalOutputs<dim> (n_q_points)));
                     this->get_material_model().evaluate(in, out);
 
                     // Substitute the adiabatic reference state for temperature and pressure,
@@ -258,7 +262,8 @@ namespace aspect
                     in.pressure[0]=this->get_adiabatic_conditions().pressure(in.position[0]);
 
                     adiabatic_out.additional_outputs.push_back(
-                      std::make_shared<MaterialModel::SeismicAdditionalOutputs<dim>> (n_q_points));
+                      std::shared_ptr<MaterialModel::AdditionalMaterialOutputs<dim> >
+                      (new MaterialModel::SeismicAdditionalOutputs<dim> (n_q_points)));
                     this->get_material_model().evaluate(in, adiabatic_out);
 
 
@@ -335,7 +340,8 @@ namespace aspect
                     in.current_cell = cell;
 
                     out.additional_outputs.push_back(
-                      std::make_shared<MaterialModel::SeismicAdditionalOutputs<dim>> (n_q_points));
+                      std::shared_ptr<MaterialModel::AdditionalMaterialOutputs<dim> >
+                      (new MaterialModel::SeismicAdditionalOutputs<dim> (n_q_points)));
                     this->get_material_model().evaluate(in, out);
 
                     MaterialModel::SeismicAdditionalOutputs<dim> *seismic_outputs

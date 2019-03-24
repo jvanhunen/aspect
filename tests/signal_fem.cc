@@ -18,7 +18,8 @@ namespace aspect
     std::cout << "* signals.edit_finite_element_variables:" << std::endl;
 
     VariableDeclaration<dim> dummy("dummy",
-                                   std::make_shared<FE_DGQ<dim>>(4),
+                                   std::shared_ptr<FiniteElement<dim> > (
+                                     new dealii::FE_DGQ<dim>(4)),
                                    2,
                                    1);
     variables.insert(variables.begin()+3, dummy);

@@ -314,8 +314,7 @@ namespace aspect
               for (unsigned int j=0; j<advection_dofs_per_cell; ++j)
                 {
                   data.local_matrix(i,j)
-                  += (parameters.diffusion_length_scale * parameters.diffusion_length_scale *
-                      (scratch.grad_phi_field[i] * scratch.grad_phi_field[j])
+                  += (std::pow(parameters.diffusion_length_scale, 2.0) * (scratch.grad_phi_field[i] * scratch.grad_phi_field[j])
                       + (scratch.phi_field[i] * scratch.phi_field[j])
                      )
                      * JxW;

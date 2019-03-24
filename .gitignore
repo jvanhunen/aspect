@@ -6,8 +6,6 @@
 /.cproject
 /.project
 /.settings
-/compile_commands.json
-/.vscode/
 /AspectConfig.cmake
 /CMakeLists.txt.user*
 /CTestTestfile.cmake

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2019 by the authors of the ASPECT code.
+ Copyright (C) 2015 - 2018 by the authors of the ASPECT code.
 
  This file is part of ASPECT.
 
@@ -21,7 +21,6 @@
 #ifndef _aspect_particle_particle_h
 #define _aspect_particle_particle_h
 
-
 #include <aspect/global.h>
 #include <aspect/particle/property_pool.h>
 
@@ -31,22 +30,8 @@
 
 #include <boost/serialization/vector.hpp>
 
-#if !DEAL_II_VERSION_GTE(9,0,0)
-
 namespace aspect
 {
-  namespace Particles
-  {
-    namespace internal
-    {
-      /**
-       * Typedef of cell level/index pair. TODO: replace this by the
-       * active_cell_index from deal.II 8.3 onwards.
-       */
-      typedef std::pair<int, int> LevelInd;
-    }
-  }
-
   namespace Particle
   {
     using namespace dealii;
@@ -57,6 +42,12 @@ namespace aspect
     namespace types
     {
       using namespace dealii::types;
+
+      /**
+       * Typedef of cell level/index pair. TODO: replace this by the
+       * active_cell_index from deal.II 8.3 onwards.
+       */
+      typedef std::pair<int, int> LevelInd;
 
       /* Type definitions */
 
@@ -99,15 +90,6 @@ namespace aspect
        */
 #  define ASPECT_PARTICLE_INDEX_MPI_TYPE MPI_UNSIGNED
 #endif
-    }
-
-    namespace internal
-    {
-      /**
-       * Typedef of cell level/index pair. TODO: replace this by the
-       * active_cell_index from deal.II 8.3 onwards.
-       */
-      typedef std::pair<int, int> LevelInd;
     }
 
     /**
@@ -389,4 +371,4 @@ namespace aspect
 }
 
 #endif
-#endif
+

@@ -109,7 +109,6 @@ subsection Postprocess
   end
 
   subsection Visualization
-    set Interpolate output = false
     set Number of grouped files       = 0
 
     set Output format                 = gnuplot

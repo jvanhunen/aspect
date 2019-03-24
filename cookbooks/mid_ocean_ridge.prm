@@ -240,6 +240,7 @@ subsection Postprocess
     end
 
     set Time between graphical output = 0
+    set Interpolate output = true
   end
 
 end
