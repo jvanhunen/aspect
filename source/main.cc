@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -415,13 +415,18 @@ read_parameter_file(const std::string &parameter_file_name)
                      MPI_INT,
                      /*root=*/0, MPI_COMM_WORLD);
 
-          std::vector<char> p (size);
-          MPI_Bcast (p.data(), size,
+          char *p = new char[size];
+          MPI_Bcast (p, size,
                      MPI_CHAR,
                      /*root=*/0, MPI_COMM_WORLD);
-          input_as_string = p.data();
+          input_as_string = p;
+          delete[] p;
         }
     }
+
+  // Replace $ASPECT_SOURCE_DIR in the input so that include statements
+  // like "include $ASPECT_SOURCE_DIR/tests/bla.prm" work.
+  input_as_string = aspect::Utilities::expand_ASPECT_SOURCE_DIR(input_as_string);
 
   return input_as_string;
 }
@@ -544,8 +549,7 @@ void signal_handler(int signal)
 
 template<int dim>
 void
-run_simulator(const std::string &raw_input_as_string,
-              const std::string &input_as_string,
+run_simulator(const std::string &input_as_string,
               const bool output_xml,
               const bool output_plugin_graph,
               const bool validate_only)
@@ -598,20 +602,6 @@ run_simulator(const std::string &raw_input_as_string,
   else
     {
       aspect::Simulator<dim> simulator(MPI_COMM_WORLD, prm);
-      if (i_am_proc_0)
-        {
-          // write create output/original.prm containing exactly what we got
-          // started with:
-          std::string output_directory = prm.get ("Output directory");
-          if (output_directory.size() == 0)
-            output_directory = "./";
-          else if (output_directory[output_directory.size()-1] != '/')
-            output_directory += "/";
-
-          std::ofstream file(output_directory + "original.prm");
-          file << raw_input_as_string;
-        }
-
       simulator.run();
     }
 }
@@ -778,11 +768,7 @@ int main (int argc, char *argv[])
 
       // See where to read input from, then do the reading and
       // put the contents of the input into a string.
-      const std::string raw_input_as_string = read_parameter_file(prm_name);
-
-      // Replace $ASPECT_SOURCE_DIR in the input so that include statements
-      // like "include $ASPECT_SOURCE_DIR/tests/bla.prm" work.
-      const std::string input_as_string = aspect::Utilities::expand_ASPECT_SOURCE_DIR(raw_input_as_string);
+      const std::string input_as_string = read_parameter_file(prm_name);
 
       // Determine the dimension we want to work in. the default
       // is 2, but if we find a line of the kind "set Dimension = ..."
@@ -802,12 +788,12 @@ int main (int argc, char *argv[])
         {
           case 2:
           {
-            run_simulator<2>(raw_input_as_string,input_as_string,output_xml,output_plugin_graph,validate_only);
+            run_simulator<2>(input_as_string,output_xml,output_plugin_graph,validate_only);
             break;
           }
           case 3:
           {
-            run_simulator<3>(raw_input_as_string,input_as_string,output_xml,output_plugin_graph,validate_only);
+            run_simulator<3>(input_as_string,output_xml,output_plugin_graph,validate_only);
             break;
           }
           default:

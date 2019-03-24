@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -35,7 +35,7 @@ namespace aspect
     bool
     EndWalltime<dim>::execute()
     {
-      return std::difftime(std::time(nullptr),start_walltime) >= walltime_duration;
+      return ( (std::time(nullptr)-start_walltime) >= (int)walltime_duration);
     }
 
 
@@ -60,8 +60,7 @@ namespace aspect
     {
       prm.enter_subsection("Termination criteria");
       {
-        // Change from hours to seconds:
-        walltime_duration = static_cast<unsigned int>(prm.get_double ("Wall time") * 3600.);
+        walltime_duration = prm.get_double ("Wall time") * 3600; // Change from hours to seconds.
       }
       prm.leave_subsection ();
     }

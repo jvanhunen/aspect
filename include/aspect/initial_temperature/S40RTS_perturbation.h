@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -35,40 +35,8 @@ namespace aspect
     {
       namespace S40RTS
       {
-        class SphericalHarmonicsLookup
-        {
-          public:
-            SphericalHarmonicsLookup(const std::string &filename,
-                                     const MPI_Comm &comm);
-
-            /// Declare a function that returns the cosine coefficients
-            const std::vector<double> &
-            cos_coeffs() const;
-
-            /// Declare a function that returns the sine coefficients
-            const std::vector<double> &
-            sin_coeffs() const;
-
-            unsigned int maxdegree() const;
-
-          private:
-            unsigned int order;
-            std::vector<double> a_lm;
-            std::vector<double> b_lm;
-        };
-
-        class SplineDepthsLookup
-        {
-          public:
-            SplineDepthsLookup(const std::string &filename,
-                               const MPI_Comm &comm);
-
-            const std::vector<double> &
-            spline_depths() const;
-
-          private:
-            std::vector<double> depths;
-        };
+        class SphericalHarmonicsLookup;
+        class SplineDepthsLookup;
       }
     }
 
@@ -203,13 +171,13 @@ namespace aspect
          * Pointer to an object that reads and processes the spherical
          * harmonics coefficients
          */
-        std::unique_ptr<internal::S40RTS::SphericalHarmonicsLookup> spherical_harmonics_lookup;
+        std::shared_ptr<internal::S40RTS::SphericalHarmonicsLookup> spherical_harmonics_lookup;
 
         /**
          * Pointer to an object that reads and processes the depths for the
          * spline knot points.
          */
-        std::unique_ptr<internal::S40RTS::SplineDepthsLookup> spline_depths_lookup;
+        std::shared_ptr<internal::S40RTS::SplineDepthsLookup> spline_depths_lookup;
 
         /**
          * Object containing the data profile.

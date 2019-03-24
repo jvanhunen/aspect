@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+ Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
 
  This file is part of ASPECT.
 
@@ -25,12 +25,7 @@
 #include <aspect/particle/world.h>
 
 #include <aspect/simulator_access.h>
-
-#if !DEAL_II_VERSION_GTE(9,0,0)
 #include <aspect/particle/particle.h>
-#else
-#include <deal.II/particles/particle_handler.h>
-#endif
 
 #include <deal.II/base/data_out_base.h>
 #include <tuple>
@@ -60,8 +55,7 @@ namespace aspect
            * write function of the base class can be called to write the output data.
            */
           void build_patches(const Particle::ParticleHandler<dim> &particle_handler,
-                             const aspect::Particle::Property::ParticlePropertyInformation &property_information,
-                             const bool only_group_3d_vectors);
+                             const aspect::Particle::Property::ParticlePropertyInformation &property_information);
 
         private:
           /**

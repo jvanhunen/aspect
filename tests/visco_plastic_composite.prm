@@ -97,7 +97,6 @@ end
 subsection Postprocess
   set List of postprocessors = velocity statistics, mass flux statistics, visualization
   subsection Visualization
-    set Interpolate output = false
     set List of output variables = viscosity
     set Output format            = gnuplot
   end

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -73,11 +73,14 @@ namespace aspect
 
       double
       burstedde_pressure (const Point<3> &pos,
-                          const double /*eta*/)
+                          const double eta)
       {
         const double x = pos[0];
         const double y = pos[1];
         const double z = pos[2];
+
+        const double min_eta = 1.0;
+        const double max_eta = eta;
 
         return x*y*z+x*x*x*y*y*y*z-5./32.;
       }
@@ -401,7 +404,7 @@ namespace aspect
 
     template <int dim>
     void
-    BursteddeGravity<dim>::declare_parameters (ParameterHandler &)
+    BursteddeGravity<dim>::declare_parameters (ParameterHandler &prm)
     {
       //nothing to declare here. This plugin will however, read parameters
       //declared by the material model in the "Burstedde benchmark" section
@@ -439,7 +442,7 @@ namespace aspect
 
     template <int dim>
     std::pair<std::string,std::string>
-    BursteddePostprocessor<dim>::execute (TableHandler &)
+    BursteddePostprocessor<dim>::execute (TableHandler &statistics)
     {
       std::shared_ptr<Function<dim> > ref_func;
       {

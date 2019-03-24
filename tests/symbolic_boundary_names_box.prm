@@ -79,7 +79,6 @@ subsection Postprocess
 
    
   subsection Visualization
-    set Interpolate output = false
     set List of output variables      = density, viscosity
   end
 end

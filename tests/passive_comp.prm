@@ -348,7 +348,6 @@ subsection Postprocess
 
 
   subsection Visualization
-    set Interpolate output = false
 
     set Number of grouped files       = 0
 
