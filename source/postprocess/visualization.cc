@@ -573,6 +573,10 @@ namespace aspect
           vtk_flags.cycle = this->get_timestep_number();
           vtk_flags.time = time_in_years_or_seconds;
 
+#if DEAL_II_VERSION_GTE(9,1,0)
+          vtk_flags.write_higher_order_cells = write_higher_order_output;
+#endif
+
           data_out.set_flags (vtk_flags);
 
           // Write as many files as processes. For this case we support writing in a
@@ -666,8 +670,9 @@ namespace aspect
 
 
     template <int dim>
-    void Visualization<dim>::writer (const std::string filename,
-                                     const std::string temporary_output_location,
+    // We need to pass the arguments by value, as this function can be called on a separate thread:
+    void Visualization<dim>::writer (const std::string filename, //NOLINT(performance-unnecessary-value-param)
+                                     const std::string temporary_output_location, //NOLINT(performance-unnecessary-value-param)
                                      const std::string *file_contents)
     {
       std::string tmp_filename = filename;
@@ -838,6 +843,30 @@ namespace aspect
                              "and a factor of 8 in 3d, when using quadratic elements for the velocity, "
                              "and correspondingly more for even higher order elements.");
 
+          prm.declare_entry ("Write higher order output", "false",
+                             Patterns::Bool(),
+                             "deal.II offers the possibility to write vtu files with higher order "
+                             "representations of the output data. This means each cell will correctly "
+                             "show the higher order representation of the output data instead of the "
+                             "linear interpolation between vertices that ParaView and Visit usually show. "
+                             "Note that activating this option is safe and recommended, but requires that "
+                             "(i) ``Output format'' is set to ``vtu'', (ii) ``Interpolate output'' is "
+                             "set to true, (iii) you use a sufficiently new version of Paraview "
+                             "or Visit to read the files (Paraview version 5.5 or newer, and Visit version "
+                             "to be determined), and (iv) you use deal.II version 9.1.0 or newer. "
+                             "\n"
+                             "The effect of using this option can be seen in the following "
+                             "picture:"
+                             "\n\n"
+                             "\\begin{center}"
+                             "  \\includegraphics[width=0.5\\textwidth]{viz/parameters/higher-order-output}"
+                             "\\end{center}"
+                             "The top figure shows the plain output without interpolation or higher "
+                             "order output. The middle figure shows output that was interpolated as "
+                             "discussed for the ``Interpolate output'' option. The bottom panel "
+                             "shows higher order output that achieves better accuracy than the "
+                             "interpolated output at a lower memory cost.");
+
           prm.declare_entry ("Filter output", "false",
                              Patterns::Bool(),
                              "deal.II offers the possibility to filter duplicate vertices for HDF5 "
@@ -863,10 +892,13 @@ namespace aspect
                              "has its own velocity field.  This may be written as an output field "
                              "by setting this parameter to true.");
 
-          // finally also construct a string for Patterns::MultipleSelection that
-          // contains the names of all registered visualization postprocessors
+          // Finally also construct a string for Patterns::MultipleSelection that
+          // contains the names of all registered visualization postprocessors.
+          // Also add a number of removed plugins that are now combined in 'material properties'
+          // to keep compatibility with input files. These will be filtered out in parse_parameters().
           const std::string pattern_of_names
-            = std::get<dim>(registered_visualization_plugins).get_pattern_of_names ();
+            = std::get<dim>(registered_visualization_plugins).get_pattern_of_names ()
+              + "|density|specific heat|thermal conductivity|thermal diffusivity|thermal expansivity|viscosity";
           prm.declare_entry("List of output variables",
                             "",
                             Patterns::MultipleSelection(pattern_of_names),
@@ -899,7 +931,7 @@ namespace aspect
     void
     Visualization<dim>::parse_parameters (ParameterHandler &prm)
     {
-      Assert (std::get<dim>(registered_visualization_plugins).plugins != 0,
+      Assert (std::get<dim>(registered_visualization_plugins).plugins != nullptr,
               ExcMessage ("No postprocessors registered!?"));
       std::vector<std::string> viz_names;
 
@@ -941,7 +973,7 @@ namespace aspect
               // null pointer. System is guaranteed to return non-zero if it finds
               // a terminal and zero if there is none (like on the compute nodes of
               // some cluster architectures, e.g. IBM BlueGene/Q)
-              AssertThrow(system((char *)0) != 0,
+              AssertThrow(system((char *)nullptr) != 0,
                           ExcMessage("Usage of a temporary storage location is only supported if "
                                      "there is a terminal available to move the files to their final location "
                                      "after writing. The system() command did not succeed in finding such a terminal."));
@@ -949,6 +981,25 @@ namespace aspect
 
           interpolate_output = prm.get_bool("Interpolate output");
           filter_output = prm.get_bool("Filter output");
+          write_higher_order_output = prm.get_bool("Write higher order output");
+
+#if DEAL_II_VERSION_GTE(9,1,0)
+#else
+          AssertThrow(write_higher_order_output == false, ExcMessage("The 'Write higher order output' functionality is only "
+                                                                     "available for deal.II version 9.1.0 or newer. Please update "
+                                                                     "your deal.II version if you need this option."));
+#endif
+
+          if (write_higher_order_output == true)
+            {
+              AssertThrow(output_format == "vtu",
+                          ExcMessage("The option 'Postprocess/Visualization/Write higher order output' requires the "
+                                     "data output format to be set to 'vtu'"));
+              AssertThrow(interpolate_output == true,
+                          ExcMessage("The input parameter 'Postprocess/Visualization/Write higher order output' "
+                                     "requires the input parameter 'Interpolate output' to be set to 'true'"));
+            }
+
           output_mesh_velocity = prm.get_bool("Output mesh velocity");
 
           // now also see which derived quantities we are to compute
@@ -970,6 +1021,54 @@ namespace aspect
                    p != std::get<dim>(registered_visualization_plugins).plugins->end(); ++p)
                 viz_names.push_back (std::get<0>(*p));
             }
+
+          // Unify material property visualization plugins into the 'material properties'
+          // plugin to avoid duplicated code and multiple calls to the material model
+          prm.enter_subsection("Material properties");
+          {
+            bool material_properties_enabled = std::find(viz_names.begin(),
+                                                         viz_names.end(),
+                                                         "material properties") != viz_names.end() ;
+
+            std::set<std::string> deprecated_postprocessors = {"density",
+                                                               "specific heat",
+                                                               "thermal conductivity",
+                                                               "thermal diffusivity",
+                                                               "thermal expansivity",
+                                                               "viscosity"
+                                                              };
+
+            // For all selected visualization plugins
+            auto plugin_name = viz_names.begin();
+            while (plugin_name != viz_names.end())
+              {
+                // Check if the current name is in the set of the deprecated names
+                if (deprecated_postprocessors.count(*plugin_name) != 0)
+                  {
+                    // If there is no 'material properties' yet
+                    if (material_properties_enabled == false)
+                      {
+                        // Set the current property name as the parameter for 'material properties'
+                        prm.set("List of material properties",*plugin_name);
+                        // Then replace the currently selected plugin with 'material properties'
+                        *plugin_name = "material properties";
+                        material_properties_enabled = true;
+                        ++plugin_name;
+                      }
+                    else
+                      {
+                        // Add the current property name to the parameter of 'material properties'
+                        std::string new_property_names = prm.get("List of material properties") + ", " + *plugin_name;
+                        prm.set("List of material properties",new_property_names);
+                        // Then delete the current plugin
+                        plugin_name = viz_names.erase(plugin_name);
+                      }
+                  }
+                else
+                  ++plugin_name;
+              }
+          }
+          prm.leave_subsection();
         }
         prm.leave_subsection();
       }
@@ -988,10 +1087,10 @@ namespace aspect
           // dealii::DataPostprocessor or of type
           // VisualizationPostprocessors::CellDataVectorCreator
           Assert ((dynamic_cast<DataPostprocessor<dim>*>(viz_postprocessor)
-                   != 0)
+                   != nullptr)
                   ||
                   (dynamic_cast<VisualizationPostprocessors::CellDataVectorCreator<dim>*>(viz_postprocessor)
-                   != 0)
+                   != nullptr)
                   ,
                   ExcMessage ("Can't convert visualization postprocessor to type "
                               "dealii::DataPostprocessor or "
@@ -1168,10 +1267,10 @@ namespace aspect
     {
       template <>
       std::list<internal::Plugins::PluginList<Postprocess::VisualizationPostprocessors::Interface<2> >::PluginInfo> *
-      internal::Plugins::PluginList<Postprocess::VisualizationPostprocessors::Interface<2> >::plugins = 0;
+      internal::Plugins::PluginList<Postprocess::VisualizationPostprocessors::Interface<2> >::plugins = nullptr;
       template <>
       std::list<internal::Plugins::PluginList<Postprocess::VisualizationPostprocessors::Interface<3> >::PluginInfo> *
-      internal::Plugins::PluginList<Postprocess::VisualizationPostprocessors::Interface<3> >::plugins = 0;
+      internal::Plugins::PluginList<Postprocess::VisualizationPostprocessors::Interface<3> >::plugins = nullptr;
     }
   }
 

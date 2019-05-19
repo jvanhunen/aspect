@@ -629,6 +629,8 @@ namespace aspect
     // constraints. Of course we need to force assembly too.
     if (rebuild_sparsity_and_matrices)
       {
+        TimerOutput::Scope timer (computing_timer, "Setup matrices");
+
         rebuild_sparsity_and_matrices = false;
         setup_system_matrix (introspection.index_sets.system_partitioning);
         setup_system_preconditioner (introspection.index_sets.system_partitioning);
@@ -821,6 +823,18 @@ namespace aspect
 
 #if DEAL_II_VERSION_GTE(9,0,0)
     current_constraints.copy_from(new_current_constraints);
+
+#ifdef DEBUG
+    IndexSet locally_active_dofs;
+    DoFTools::extract_locally_active_dofs(dof_handler, locally_active_dofs);
+    Assert(current_constraints.is_consistent_in_parallel(
+             dof_handler.locally_owned_dofs_per_processor(),
+             locally_active_dofs,
+             mpi_communicator,
+             false /*verbose=false*/),
+           ExcMessage("Inconsistent Constraints detected!"));
+#endif
+
 #else
     current_constraints.clear ();
     current_constraints.reinit (introspection.index_sets.system_relevant_set);
@@ -903,7 +917,12 @@ namespace aspect
               coupling[x.pressure][x.velocities[d]] = DoFTools::always;
             }
         }
-      coupling[x.temperature][x.temperature] = DoFTools::always;
+      // Do not allocate a temperature matrix if no temperature
+      // solves are going to be performed.
+      if (!(parameters.nonlinear_solver == NonlinearSolver::Kind::no_Advection_iterated_Stokes
+            ||
+            parameters.nonlinear_solver == NonlinearSolver::Kind::no_Advection_no_Stokes))
+        coupling[x.temperature][x.temperature] = DoFTools::always;
 
       // If we have at least one compositional field that is a FEM field, we
       // create a matrix block in the first compositional block. Its sparsity
@@ -1286,14 +1305,14 @@ namespace aspect
       free_surface->setup_dofs();
 
 
-    // reinit the constraints matrix and make hanging node constraints
+    // Reconstruct the constraint-matrix:
     constraints.clear();
     constraints.reinit(introspection.index_sets.system_relevant_set);
 
-    DoFTools::make_hanging_node_constraints (dof_handler,
-                                             constraints);
+    // Set up the constraints for periodic boundary conditions:
 
-    // Now set up the constraints for periodic boundary conditions
+    // Note: this has to happen _before_ we do hanging node constraints,
+    // because inconsistent contraints could be generated in parallel otherwise.
     {
       typedef std::set< std::pair< std::pair< types::boundary_id, types::boundary_id>, unsigned int> >
       periodic_boundary_set;
@@ -1307,9 +1326,11 @@ namespace aspect
                                                  (*p).second,       // cartesian direction for translational symmetry
                                                  constraints);
         }
-
-
     }
+
+    //  Make hanging node constraints:
+    DoFTools::make_hanging_node_constraints (dof_handler,
+                                             constraints);
 
 
     compute_initial_velocity_boundary_constraints(constraints);
