@@ -32,7 +32,6 @@
 #include <aspect/particle/generator/interface.h>
 #include <aspect/particle/integrator/interface.h>
 #include <aspect/particle/interpolator/interface.h>
-#include <aspect/particle/output/interface.h>
 #include <aspect/particle/property/interface.h>
 #include <aspect/postprocess/visualization.h>
 
@@ -203,7 +202,8 @@ namespace aspect
      * it, so we need to work on a copy. This copy is deleted at the end
      * of this function.
      */
-    void do_output_statistics (const std::string stat_file_name,
+    // We need to pass the arguments by value, as this function can be called on a separate thread:
+    void do_output_statistics (const std::string stat_file_name, //NOLINT(performance-unnecessary-value-param)
                                const TableHandler *copy_of_table)
     {
       // write into a temporary file for now so that we don't
@@ -1775,7 +1775,7 @@ namespace aspect
       = out.template get_additional_output<MaterialModel::PrescribedFieldOutputs<dim> >();
 
     // check if the material model computes prescribed field outputs
-    AssertThrow(prescribed_field_out != NULL,
+    AssertThrow(prescribed_field_out != nullptr,
                 ExcMessage("You are trying to use a prescribed advection field, "
                            "but the material model you use does not support interpolating properties "
                            "(it does not create PrescribedFieldOutputs, which is required for this "

@@ -399,7 +399,7 @@ namespace aspect
     solver_control.enable_history_data();
 
     SolverGMRES<LinearAlgebra::Vector>   solver (solver_control,
-                                                 SolverGMRES<LinearAlgebra::Vector>::AdditionalData(30,true));
+                                                 SolverGMRES<LinearAlgebra::Vector>::AdditionalData(parameters.advection_gmres_restart_length,true));
 
     // check if matrix and/or RHS are zero
     // note: to avoid a warning, we compare against numeric_limits<double>::min() instead of 0 here
@@ -677,12 +677,12 @@ namespace aspect
         else
           {
             // The Newton solver solves for updates to variables, for which our best guess is zero when
-            // the it isn't the first nonlinear iteration. When it is the first nonlinear iteration, we
+            // it isn't the first nonlinear iteration. When it is the first nonlinear iteration, we
             // have to assemble the full (non-defect correction) Picard, to get the boundary conditions
-            // right in combination with being able to use the initial guess optimally. So we may never
+            // right in combination with being able to use the initial guess optimally. So we should never
             // end up here when it is the first nonlinear iteration.
             Assert(nonlinear_iteration != 0,
-                   ExcMessage ("The Newton solver may not be active in the first nonlinear iteration"));
+                   ExcMessage ("The Newton solver should not be active in the first nonlinear iteration."));
 
             linearized_stokes_initial_guess.block (block_vel) = 0;
             linearized_stokes_initial_guess.block (block_p) = 0;
