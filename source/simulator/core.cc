@@ -212,6 +212,7 @@ namespace aspect
     dof_handler (triangulation),
 
     last_pressure_normalization_adjustment (numbers::signaling_nan<double>()),
+    pressure_scaling (numbers::signaling_nan<double>()),
 
     rebuild_stokes_matrix (true),
     assemble_newton_stokes_matrix (true),
@@ -399,12 +400,6 @@ namespace aspect
         bv->parse_parameters (prm);
         bv->initialize ();
       }
-
-    // determine how to treat the pressure. we have to scale it for the solver
-    // to make velocities and pressures of roughly the same (numerical) size,
-    // and we may have to fix up the right hand side vector before solving for
-    // compressible models if there are no in-/outflow boundaries
-    pressure_scaling = material_model->reference_viscosity() / geometry_model->length_scale();
 
     std::set<types::boundary_id> open_velocity_boundary_indicators
       = geometry_model->get_used_boundary_indicators();
@@ -621,6 +616,21 @@ namespace aspect
 
     nonlinear_iteration = 0;
 
+    // Re-compute the pressure scaling factor. In some sense, it would be nice
+    // if we did this not just once per time step, but once for each solve --
+    // i.e., multiple times per time step if we iterate out the nonlinearity
+    // during a Newton or Picard iteration. But that's more work,
+    // and the function would need to be called in more different places.
+    // Unless we have evidence that that's necessary, let's assume that
+    // the reference viscosity does not change too much between nonlinear
+    // iterations and that it's ok to update it only once per time step.
+    //
+    // The call to this function must precede the one to the computation
+    // of constraints because some kinds of constraints require scaling
+    // pressure degrees of freedom to a size adjusted by the pressure_scaling
+    // factor.
+    compute_pressure_scaling_factor();
+
     // then interpolate the current boundary velocities. copy constraints
     // into current_constraints and then add to current_constraints
     compute_current_constraints ();
@@ -656,6 +666,7 @@ namespace aspect
     for (auto &p : boundary_traction)
       p.second->update ();
   }
+
 
 
   template <int dim>
@@ -788,7 +799,6 @@ namespace aspect
       {
         bool constrained_dofs_set_changed = false;
 
-#if DEAL_II_VERSION_GTE(9,0,0)
         for (auto &row: current_constraints.get_lines())
           {
             if (!new_current_constraints.is_constrained(row.index))
@@ -797,23 +807,6 @@ namespace aspect
                 break;
               }
           }
-#else
-        for (const auto row: current_constraints.get_local_lines())
-          {
-            // Decide if we need to construct a new sparsity pattern.
-            // This is only necessary if at least one of the DoFs that were
-            // constrained in the previous time step are not constrained any more,
-            // because in this case we will need additionl matrix entries.
-            // The matrices will be reassembled in each timestep regardless,
-            // so the values of the constraints do not matter for the sparsity pattern.
-            if (current_constraints.is_constrained(row)
-                != new_current_constraints.is_constrained(row))
-              {
-                constrained_dofs_set_changed = true;
-                break;
-              }
-          }
-#endif
 
         const bool any_constrained_dofs_set_changed = Utilities::MPI::sum(constrained_dofs_set_changed ? 1 : 0,
                                                                           mpi_communicator) > 0;
@@ -1846,17 +1839,26 @@ namespace aspect
         // see if we want to write a timing summary
         maybe_write_timing_output();
 
-        // update values for timestep, increment time step by one. then prepare
-        // for the next time step by shifting solution vectors
-        // by one time step
+        // update values for timestep, increment time step by one.
         old_time_step = time_step;
         time_step = new_time_step;
         time += time_step;
         ++timestep_number;
-        {
-          old_old_solution      = old_solution;
-          old_solution          = solution;
-        }
+
+        // prepare for the next time step by shifting solution vectors
+        // by one time step. In timestep 0 (just increased in the
+        // line above) initialize both old_solution
+        // and old_old_solution with the currently computed solution.
+        if (timestep_number == 1)
+          {
+            old_old_solution      = solution;
+            old_solution          = solution;
+          }
+        else
+          {
+            old_old_solution      = old_solution;
+            old_solution          = solution;
+          }
 
         // check whether to terminate the simulation. the
         // first part of the pair indicates whether to terminate

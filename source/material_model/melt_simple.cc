@@ -184,7 +184,6 @@ namespace aspect
       for (unsigned int q=0; q<in.temperature.size(); ++q)
         melt_fractions[q] = this->melt_fraction(in.temperature[q],
                                                 this->get_adiabatic_conditions().pressure(in.position[q]));
-      return;
     }
 
 
@@ -770,7 +769,7 @@ namespace aspect
         {
           const unsigned int n_points = out.viscosities.size();
           out.additional_outputs.push_back(
-            std::make_shared<MaterialModel::ReactionRateOutputs<dim>> (n_points, this->n_compositional_fields()));
+            std_cxx14::make_unique<MaterialModel::ReactionRateOutputs<dim>> (n_points, this->n_compositional_fields()));
         }
     }
   }
