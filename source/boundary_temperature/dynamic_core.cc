@@ -302,7 +302,8 @@ namespace aspect
     DynamicCore<dim>::read_data_OES()
     {
       data_OES.clear();
-      if (name_OES.size()==0) return;
+      if (name_OES.size()==0)
+        return;
       std::istringstream in(Utilities::read_and_distribute_file_content(name_OES.c_str(),
                                                                         this->get_mpi_communicator()));
       if (in.good())
@@ -982,7 +983,7 @@ namespace aspect
   namespace BoundaryTemperature
   {
     ASPECT_REGISTER_BOUNDARY_TEMPERATURE_MODEL(DynamicCore,
-                                               "Dynamic core",
+                                               "dynamic core",
                                                "This is a boundary temperature model working only with spherical "
                                                "shell geometry and core statistics postprocessor. The temperature "
                                                "at the top is constant, and the core mantle boundary temperature "

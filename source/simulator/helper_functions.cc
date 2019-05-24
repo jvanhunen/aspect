@@ -277,9 +277,6 @@ namespace aspect
     Particle::Generator::write_plugin_graph<dim>(out);
     Particle::Integrator::write_plugin_graph<dim>(out);
     Particle::Interpolator::write_plugin_graph<dim>(out);
-#if !DEAL_II_VERSION_GTE(9,0,0)
-    Particle::Output::write_plugin_graph<dim>(out);
-#endif
     Particle::Property::Manager<dim>::write_plugin_graph(out);
     Postprocess::Manager<dim>::write_plugin_graph(out);
     Postprocess::Visualization<dim>::write_plugin_graph(out);
@@ -312,6 +309,18 @@ namespace aspect
     output_statistics_thread = Threads::new_thread (&do_output_statistics,
                                                     parameters.output_directory+"statistics",
                                                     new TableHandler(statistics));
+  }
+
+
+
+  template <int dim>
+  void
+  Simulator<dim>::
+  compute_pressure_scaling_factor()
+  {
+    // Determine how to treat the pressure. we have to scale it for the solver
+    // to make velocities and pressures of roughly the same (numerical) size
+    pressure_scaling = material_model->reference_viscosity() / geometry_model->length_scale();
   }
 
 
@@ -2346,6 +2355,7 @@ namespace aspect
   template void Simulator<dim>::denormalize_pressure(const double pressure_adjustment, \
                                                      LinearAlgebra::BlockVector &vector, \
                                                      const LinearAlgebra::BlockVector &relevant_vector) const; \
+  template void Simulator<dim>::compute_pressure_scaling_factor (); \
   template double Simulator<dim>::get_maximal_velocity (const LinearAlgebra::BlockVector &solution) const; \
   template std::pair<double,double> Simulator<dim>::get_extrapolated_advection_field_range (const AdvectionField &advection_field) const; \
   template void Simulator<dim>::maybe_write_timing_output () const; \

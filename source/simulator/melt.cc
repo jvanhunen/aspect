@@ -168,7 +168,7 @@ namespace aspect
           && outputs.template get_additional_output<MaterialModel::AdditionalMaterialOutputsStokesRHS<dim> >() == nullptr)
         {
           outputs.additional_outputs.push_back(
-            std::make_shared<MaterialModel::AdditionalMaterialOutputsStokesRHS<dim> >(n_points));
+            std_cxx14::make_unique<MaterialModel::AdditionalMaterialOutputsStokesRHS<dim> >(n_points));
         }
 
       Assert(!this->get_parameters().enable_additional_stokes_rhs
@@ -578,11 +578,7 @@ namespace aspect
         face->boundary_id(),
         scratch.face_material_model_inputs,
         scratch.face_material_model_outputs,
-#if DEAL_II_VERSION_GTE(9,0,0)
         scratch.face_finite_element_values.get_normal_vectors(),
-#else
-        scratch.face_finite_element_values.get_all_normal_vectors(),
-#endif
         grad_p_f);
 
       for (unsigned int q=0; q<n_face_q_points; ++q)
@@ -1847,7 +1843,7 @@ namespace aspect
     const unsigned int n_points = output.viscosities.size();
     const unsigned int n_comp = output.reaction_terms[0].size();
     output.additional_outputs.push_back(
-      std::make_shared<MaterialModel::MeltOutputs<dim>> (n_points, n_comp));
+      std_cxx14::make_unique<MaterialModel::MeltOutputs<dim>> (n_points, n_comp));
   }
 
 

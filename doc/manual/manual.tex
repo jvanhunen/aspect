@@ -225,7 +225,7 @@ COMPUTATIONAL INFRASTRUCTURE FOR GEODYNAMICS (CIG)
 
 \aspect{} --- short for Advanced Solver for Problems in Earth's ConvecTion ---
 is a code intended to solve the equations that describe thermally driven
-convection with a focus on doing so in the context of convection in the earth
+convection with a focus on doing so in the context of convection in the Earth
 mantle. It is primarily developed by computational scientists at Texas A\&M
 University based on the following principles:
 \begin{itemize}
@@ -236,7 +236,7 @@ University based on the following principles:
   defining features of the problem. To name just a few examples:
   \begin{itemize}
   \item Mantle convection is often solved in a spherical shell geometry, but
-    the earth is not a sphere -- its true shape on the longest length scales is
+    the Earth is not a sphere -- its true shape on the longest length scales is
     dominated by polar oblateness, but deviations from spherical shape
     relevant to convection patterns may go down to the length scales of
     mountain belts, mid-ocean ridges or subduction trenches. Furthermore,
@@ -252,7 +252,7 @@ University based on the following principles:
   \end{itemize}
   This uncertainty in what problem one actually wants to solve requires a code
   that is easy to extend by users to support the community in determining what
-  the essential features of convection in the earth mantle are. Achieving this
+  the essential features of convection in the Earth mantle are. Achieving this
   goal also opens up possibilities outside the original scope, such as the
   simulation of convection in exoplanets or the icy satellites of the gas
   giant planets in our solar system.
@@ -597,10 +597,10 @@ tangential component undetermined.
   just wants to prescribe a pressure component). It is possible to restrict
   prescribing the traction to only certain vector components.
   \item $\Gamma_{D,T}$ corresponds to places where the temperature is prescribed
-  (for example at the inner and outer boundaries of the earth mantle).
+  (for example at the inner and outer boundaries of the Earth's mantle).
   \item $\Gamma_{N,T}$ corresponds to places where the temperature is unknown
   but the heat flux across the boundary is zero (for example on symmetry surfaces if only a part
-of the shell that constitutes the domain the Earth mantle occupies is
+of the shell that constitutes the domain the Earth's mantle occupies is
 simulated).
 \end{itemize}
 We require that one of these boundary conditions hold at each
@@ -911,7 +911,7 @@ Units $\frac{\textrm{J}}{\textrm{kg}\cdot\textrm{K}} =
    relative to the olivine polymorphs.
    
    
-\item \textit{The change of entropy $\Delta S$ at a
+\item \textit{The change in entropy $\Delta S$ at a
   phase transition together with the derivatives of the phase function
   $X=X(p,T,\mathfrak c,\mathbf x)$ with regard to temperature and pressure:} Units
   $\frac{\textrm{J}}{\textrm{kg}\textrm{K}^2}$ ($-\Delta S \frac{\partial X}{\partial T}$) and
@@ -964,7 +964,7 @@ Gibbs free energy:
   \gamma &=& \frac{\alpha }{\beta_T \rho C_V}. 
 \end{eqnarray}
 where $S$ is the specific entropy, $C_p$ and $C_V$ are the specific isobaric
-and isenchoric heat capacities, $\beta_T$ and $\beta_S$ are the isothermal and isotropic
+and isochoric heat capacities, $\beta_T$ and $\beta_S$ are the isothermal and isotropic
 compressibilities, and $\gamma$ is the thermodynamic Gr\"{u}neisen parameter. The subscript
 indicates the thermodynamic variable ($p$ or $T$) that is held constant.
 
@@ -3261,7 +3261,7 @@ The purpose of these files is as follows:
   doesn't appear to be an agreed upon way to describe which files jointly make
   up for the simulation data of a single time step (i.e., all files with the
   same \texttt{XXXXX} but different \texttt{YYYY} in the example above). Visit
-  and Paraview both have their method of doing things, through \texttt{.pvtu} and
+  and ParaView both have their method of doing things, through \texttt{.pvtu} and
   \texttt{.visit} files. To make it easy for you to view data, \aspect{}
   simply creates both kinds of files in each time step in which graphical data
   is produced, and these are then also placed into the subdirectories as
@@ -3270,7 +3270,7 @@ The purpose of these files is as follows:
 
   The final two files of this kind, \texttt{output/solution.pvd} and
   \texttt{output/solution.visit}, are files that
-  describes to Paraview and Visit, respectively, which
+  describes to ParaView and Visit, respectively, which
   \texttt{output/solution/solution-XXXXX.pvtu} and
   \texttt{output/solution/solution-XXXXX.YYYY.vtu} jointly form a complete
   simulation.
@@ -3280,7 +3280,7 @@ The purpose of these files is as follows:
   simulation, grouped by the timestep they correspond to.
   To visualize an entire simulation, not just a single time step, it is
   therefore simplest to just load one of these files, depending on whether you
-  use Paraview or Visit.%
+  use ParaView or Visit.%
   \footnote{At the time of writing this, current versions of Visit (starting
     with version 2.5.1) actually have a bug that prevents them from
     successfully reading the \texttt{output/solution.visit} or
@@ -3641,7 +3641,7 @@ More information on all of these topics can be found in the Visit
 documentation, see \url{https://visit.llnl.gov/}. We have also recorded
 video lectures demonstrating this process interactively at
 \url{http://www.youtube.com/watch?v=3ChnUxqtt08} for Visit, and at
-\url{http://www.youtube.com/watch?v=w-65jufR-bc} for Paraview.
+\url{http://www.youtube.com/watch?v=w-65jufR-bc} for ParaView.
 
 
 \subsubsection{Visualizing statistical data}
@@ -4344,7 +4344,7 @@ linked to above.
 
 We strive to maintain compatibility for options in input files as long as
 possible. However, occasionally we have to reorder, rename, or remove options
-from parameter files to improve \aspect{} further. This is in particular true
+from parameter files to improve \aspect{} further. This is especially true
 for new major versions. In order to allow running old parameter files with
 newer \aspect{} versions we provide scripts that can automatically update
 existing parameter files to the new syntax. Executing
@@ -5829,7 +5829,7 @@ information to particles, and how to visualize these.
 
 \paragraph{Using particle properties.}
 
-The particles in the above example only fulfil the purpose of
+The particles in the above example only fulfill the purpose of
 visualizing the convection pattern. A more meaningful use for
 particles is to attach ``properties'' to them. A property consists of
 one or more numbers (or vectors or tensors) that may either be set at
@@ -6709,12 +6709,12 @@ and one compositional field. We choose the \texttt{ascii data} compositional ini
 want to read in our jellyfish. The relevant parts of the input file are listed below:
 \lstinputlisting[language=prmfile]{cookbooks/geomio/geomIO.prm.out}
 
-If we look at the output in \texttt{paraview}, we can see our jellyfish, with the mesh refined at the 
+If we look at the output in \texttt{ParaView}, we can see our jellyfish, with the mesh refined at the 
 boundaries between the different phases (Figure~\ref{fig:jelly-paraview}). 
 \begin{figure}[tb]
     \centering
     \includegraphics[width=0.55\textwidth]{cookbooks/geomio/jelly-paraview.pdf}
-    \caption{\aspect{} model output of the jellyfish and corresponding mesh in paraview.}
+    \caption{\aspect{} model output of the jellyfish and corresponding mesh in ParaView.}
     \label{fig:jelly-paraview}
 \end{figure}
 
@@ -6752,7 +6752,7 @@ The boundary conditions are insulating (zero flux) side-walls and fixed temperat
 \caption{\it Initial temperature condition for the lazy-expression syntax cookbook. \label{lazy-expression-tempic}}
 \end{figure}
 
-The structure and refinement of the mesh are determined in two subsections of the parameter file. First, because the model domain is not a square, it is necessary to subdivide the domain into sections that are equidimensional (or as close as possible): this is done using the \texttt{repetitions} parameters in the \texttt{Geometry} section. In this case because the model domain has an aspect ratio of 5:1, we use 5 repetitions in the x direction, dividing the domain into 5 equi-dimensional elements each 1000 by 1000 km.
+The structure and refinement of the mesh are determined in two subsections of the parameter file. First, because the model domain is not a square, it is necessary to subdivide the domain into sections that are equidimensional (or as close as possible): this is done using the \texttt{repetitions} parameters in the \texttt{Geometry} section. In this case because the model domain has an aspect ratio of 5:1, we use 5 repetitions in the x direction, dividing the domain into 5 equidimensional elements each 1000 by 1000 km.
 \lstinputlisting[language=prmfile]{cookbooks/muparser-temperature-example/repetitions.part.prm}
 Further refinements will divide each sub-region multiple times keeping the aspect ratio of the sub-region. In this case, we refine the elements in each subregion 3 more times. We then use the \texttt{minimum refinement function} strategy and use the function expression to refine 4 more times to a refinement level of 7, but only where the depth is less than 150 km.
 \lstinputlisting[language=prmfile]{cookbooks/muparser-temperature-example/mesh-refinement.part.prm}
@@ -7381,7 +7381,7 @@ bottom surface (Figure~\ref{fig:pp}).
 In Figure~\ref{fig:pp} c, d we have subtracted the mean dynamic topography from
 the output field as a postproceesing step outside of Aspect. Since mass is 
 conserved within the Earth, the mean dynamic topography
-should always be zero, however, the outputted values might not fullfill this 
+should always be zero, however, the outputted values might not fulfill this 
 constraint if the resolution of the model is not high enough to provide an
 accurate solution. This cookbook only uses a refinement of 2, which is relatively
 low resolution. 
@@ -7446,7 +7446,7 @@ $a_{10}$ $a_{11}$ $b_{11}$ \\
 $a_{20}$ $a_{21}$ $b_{21}$ $a_{22}$ $b_{22}$ \\
 ... \\
 
-$a_{yz}$ is the cosine coefficient of degree $y$ and order $z$ and $b_{yz}$ is 
+$a_{yz}$ is the cosine coefficient of degree $y$ and order $z$; $b_{yz}$ is 
 the sine coefficient of degree $y$ and order $z$. The depth layers are specified 
 in the file \texttt{Spline\_knots.txt} by a normalized depth value ranging from the CMB (3480km, 
 normalized to -1) to the Moho (6346km, normalized to 1). This is the original
@@ -7460,7 +7460,10 @@ code. A further note of caution when switching to a different input model
 concerns the normalization of the spherical harmonics, which might differ.  
 After reading in the shear wave velocity perturbation one has several options
 to scale this into temperature differences, which are then used to initialize 
-the temperature field. 
+the temperature field. It should be noted that the shear wave velocity perturbations in 
+S20RTS and S40RTS are expressed in terms of percentage deviation from PREM. Wavespeed perturbations
+in other models may be referenced to other absolute values and this should be taken into account
+when interpreting absolute values of temperature, density and other physical parameters in ASPECT.
 
 \paragraph{Setting up the \aspect{} model.}
 
@@ -7524,7 +7527,7 @@ Figure~\ref{fig:ic-1}c and d shows the heat flux density at the surface for
 4 refinement steps (d, colorbar ranges from 35 to 95 mW/$m^2$). A first order correlation
 with upper mantle features such as high heat flow at mid ocean ridges and low
 heat flow at cratons is correctly initialized by the tomography model. 
-The mantle flow and bouyancy variations produce dynamic topography on the 
+The mantle flow and buoyancy variations produce dynamic topography on the 
 top and bottom surface, which is shown for 2 refinement steps (\ref{fig:ic-2}a and c, respectively) 
 and 4 refinement steps (\ref{fig:ic-2}b and d, respectively). 
 One can see that subduction zones are visible as depressed surface topography 
@@ -8205,14 +8208,20 @@ as temperature variations associated with lithospheric thinning exert a first-or
 \textit{This section was contributed by Juliane Dannberg, and the model setup was inspired 
 by discussions with John Rudge. Additional materials and comments by Mathilde Kervazo and Marine Lasbleis.}
 
-This is an example of convection in the inner core of the Earth. The model is based on a spherical geometry, with a single material. Three main particularities are constitutive of this inner core dynamics modeling: it consists of a self-gravitating sphere where the gravity decreases linearly from the boundary to zero at the center of the inner core; the boundary conditions combine normal stress and normal velocity, and take into account the rate of phase change (melting/freezing) at the inner-outer core boundary; the material has a temperature dependent density that makes the density profile unstably stratified as temperature increases towards the center of the core.
+This is an example of convection in the inner core of the Earth. The model is based on a spherical geometry, with a single material. Three main particularities are constitutive of this inner core dynamics modeling: it consists of a sphere where the gravity decreases linearly (to mimic self-gravitation) from the boundary to zero at the center of the inner core; the boundary conditions combine normal stress and normal velocity, and take into account the rate of phase change (melting/freezing) at the inner-outer core boundary; the material has a temperature dependent density that makes the density profile unstably stratified as temperature increases towards the center of the core.
 Note that we do not actually compute self-gravitation, but instead define a linear gravity profile. Since the density variations are very small, this is a good approximation.
 
 The setup is analogous to the models described in \cite{Deguen2013}, and all material properties 
 are chosen in a way so that the equations are non-dimensional.
 
 The required heating model and changes to the material model are implemented in a shared library
-(\url{cookbooks/inner_core_convection/inner_core_convection.cc}). 
+(\url{cookbooks/inner_core_convection/inner_core_convection.cc}). To compile the file, do
+
+\begin{verbatim}
+ $ cmake -DAspect_DIR=/path/to/aspect .
+ 
+ make
+\end{verbatim}
 
 In the non-dimensional form of the equations derived by \cite{Deguen2013}, we solve for the potential temperature $T = \tilde{T}-T_{\text{is}}$ ($\tilde{T}$ is the temperature field, $T_{\text{is}}$ the isentropic -- also called adiabatic -- temperature). This allows to solve the temperature field with simple boundary conditions ($T=0$), even if the temperature of the inner core boundary evolves with time, defined as the intersection between the isentrope and the liquidus of the material in the outer core.  
 The equations for inner core convection in the approximation of no growth (equation 59 for the potential temperature) are
@@ -8642,7 +8651,7 @@ and
 \alpha'=\frac{\kappa}{b^2}\left[\frac{\rho_0 g \alpha b^3 \Delta T}{\mu \kappa}\left(\frac{\frac{4\pi^2 b^2}{\lambda^2}}{\left(\frac{4\pi^2 b^2}{\lambda^2}+\pi^2\right)^2}\right) -\left(\pi^2+\frac{4\pi^2b^2}{\lambda^2}\right)\right].
 \end{align*}
 
-We use bisection to determine $Ra_c$ for specific choices of the domain geometry, keeping the depth $b$ constant and varying the domain width $\lambda$. If the vertical velocity increases from the first to the second timetsp, the system is unstable to convection. Otherwise, it is stable and convection will not occur. Each calculation is terminated after the second timestep. Fig.~\ref{fig:onset-1} shows the numerically-determined threshold for the onset of convection, which can be compared directly with the theoretical prediction (green curve) and Fig.~6.39 of \cite{TS14}. The relative error between the numerically-determined value of $Ra_c$ and the analytic solution are shown in the right panel of Fig.~\ref{fig:onset-1}.
+We use bisection to determine $Ra_c$ for specific choices of the domain geometry, keeping the depth $b$ constant and varying the domain width $\lambda$. If the vertical velocity increases from the first to the second timestep, the system is unstable to convection. Otherwise, it is stable and convection will not occur. Each calculation is terminated after the second timestep. Fig.~\ref{fig:onset-1} shows the numerically-determined threshold for the onset of convection, which can be compared directly with the theoretical prediction (green curve) and Fig.~6.39 of \cite{TS14}. The relative error between the numerically-determined value of $Ra_c$ and the analytic solution are shown in the right panel of Fig.~\ref{fig:onset-1}.
 
 \begin{figure}
  \includegraphics[width=0.49\textwidth]{cookbooks/benchmarks/onset-of-convection/racr.png}
@@ -8819,7 +8828,7 @@ for the lack of convergence.
 In this section we extend the van Keken cookbook following up the work previously completed by Cedric Thieulot, Juliane Dannberg,
 Timo Heister and Wolfgang Bangerth.  \textit{This section contributed by Grant Euen, Tahiry Rajaonarison, and Shangxin Liu as part of the Geodynamics and ASPECT class at Virginia Tech.}  
 
-As already mentioned above, using a half width parameter proportional to the mesh size allows for more accurate results.  We test the effect of the half width size of the smoothed discontinuity by changing the division by 0.02, the smoothing parameter, in the formula for the smoothed initial conditions into values proportional to the mesh size.  We use 7 global refinements because the root mean square velocity converges at greater resolution while keeping average runtime around 5 to 25 minutes.  These runtimes were produced by the BlueRidge cluster of the Advanced Research Computing (ARC) program at Virginia Tech.  BlueRidge is a 408-node Cray CS-300 cluster; each node outfitted with two octa-core Intel Sandy Bridge CPUs and 64 GB of memory.  A chart of average runtimes for 5 through 10 global refinements on one node can be seen in Table~\ref{tab:runtime-table}.  For 7 global refinements (128$\times$128 mesh size), the size of the mesh is 0.0078 corresponding to a half width parameter of 0.0039.  The smooth model allows for much better convergence of the secondary plumes, although they are still more scattered than the primary plumes.
+As already mentioned above, using a half width parameter proportional to the mesh size allows for more accurate results.  We test the effect of the half width size of the smoothed discontinuity by changing the smoothing parameter to values proportional to the mesh size.  In the formula for the smoothed initial conditions, this parameter is the division by 0.02.  We use 7 global refinements because the root mean square velocity converges at greater resolution while keeping average runtime around 5 to 25 minutes.  These runtimes were produced by the BlueRidge cluster of the Advanced Research Computing (ARC) program at Virginia Tech.  BlueRidge is a 408-node Cray CS-300 cluster; each node outfitted with two octa-core Intel Sandy Bridge CPUs and 64 GB of memory.  Average runtimes for global refinements 5 through 10 using one node can be seen in Table~\ref{tab:runtime-table}.  For 7 global refinements (128$\times$128 mesh size), the size of the mesh is 0.0078 corresponding to a half width parameter of 0.0039.  The smooth model allows for much better convergence of the secondary plumes, although they are still more scattered than the primary plumes.
 
 \begin{table}[htb]
         \center
@@ -8839,7 +8848,7 @@ As already mentioned above, using a half width parameter proportional to the mes
         \label{tab:runtime-table}
 \end{table}
 
-This convergence is due to changing the smoothing parameter, which controls how much of the problem is smoothed over.  As the parameter is increased, the smoothed boundary grows and vice versa.  As the smoothed boundary shrinks it becomes sharper until the original discontinuous behavior is revealed.  As it grows, the two layers eventually become one large, transitioning layer rather than two distinct layers separated by a boundary.  These effects can be seen in Fig.~\ref{fig:vk-5}.  The overall effect is that the secondary rise is at different times based on these conditions.  In general, as the smoothing parameter is decreased, the smoothed boundary shrinks and the plumes rise more quickly.  As it is increased, the boundary grows and the plumes rise more slowly.  This trend can be used to force a more accurate convergence from the secondary plumes.
+This convergence is due to changing the smoothing parameter, which controls how much of the problem is smoothed over.  As the parameter is increased the smoothed boundary grows; as the smoothed boundary shrinks it becomes sharper until the original discontinuous behavior is revealed.  As the boundary grows, the two distinct layers eventually become one large, transitioning layer.  These effects can be seen in Fig.~\ref{fig:vk-5}.  The overall effect is that the secondary rise is at different times based on these conditions.  In general, as the smoothing parameter is decreased the smoothed boundary shrinks, and the plumes rise more quickly.  As it is increased the boundary grows, and the plumes rise more slowly.  This trend can be used to force a more accurate convergence from the secondary plumes.
 
 \begin{figure}
         \centering
@@ -8848,7 +8857,7 @@ This convergence is due to changing the smoothing parameter, which controls how 
         \label{fig:vk-5}
 \end{figure}
 
-The evolution in time of the resulting compositional fields (Fig.~\ref{fig:vk-6}) shows that the first peak converges as the smoothed interface decreases. There is a good agreement for the first peak for all smoothing parameters.  As the width of the discontinuity increases, the second peak rises both later and more slowly.
+The evolution in time of the resulting compositional fields (Fig.~\ref{fig:vk-6}) shows that the first peak converges as the smoothed interface decreases. There is a good agreement for the first peak for all smoothing parameters.  As the width of the discontinuity increases, the second peak rises more slowly and later in the run.
 
 \begin{figure}
         \centering
@@ -8857,25 +8866,25 @@ The evolution in time of the resulting compositional fields (Fig.~\ref{fig:vk-6}
         \label{fig:vk-6}
 \end{figure}
 
-Now let us further add a two-layer viscosity model to the domain. This is done to recreate the two nonisoviscous Rayleigh-Taylor instability cases (``cases 1b and 1c'') published in van Keken \textit{et al.} in \cite{KKSCND97}.  Let's assume the viscosity value of the upper heavier layer is $\eta_{t}$ and the viscosity value of the lower lighter layer is $\eta_{b}$. Based on the initial constant viscosity value 1$\times10^{2}$ Pa~s, we set the viscosity proportion $\frac{\eta_{t}}{\eta_{b}}=0.1, 0.01$, meaning the viscosity of the upper, heavier layer is still 1$\times10^{2}$ Pa~s, but the viscosity of the lower, lighter layer is now either 10 or 1 Pa~s, respectively. The viscosity profiles of the discontinuous and smooth models are shown in Fig.~\ref{fig:vk-7}.
+Now let us further add a two-layer viscosity model to the domain. This is done to recreate the two nonisoviscous Rayleigh-Taylor instability cases (``cases 1b and 1c'') published in van Keken \textit{et al.} in \cite{KKSCND97}.  Let's assume the viscosity value of the upper, heavier layer is $\eta_{t}$ and the viscosity value of the lower, lighter layer is $\eta_{b}$. Based on the initial constant viscosity value 1$\times10^{2}$ Pa~s, we set the viscosity proportion $\frac{\eta_{t}}{\eta_{b}}=0.1, 0.01$, meaning the viscosity of the upper, heavier layer is still 1$\times10^{2}$ Pa~s, but the viscosity of the lower, lighter layer is now either 10 or 1 Pa~s, respectively. The viscosity profiles of the discontinuous and smooth models are shown in Fig.~\ref{fig:vk-7}.
 
 \begin{figure}
         \centering
         \includegraphics[width=0.7\textwidth]{cookbooks/benchmarks/van-keken/contrast_viscosity.png}
-        \caption{\it Van Keken benchmark using layers of different viscosities. The left image is the discontinuous case, while right is the smooth.  Both are shown at t=0.}
+        \caption{\it Van Keken benchmark using different-viscosity layers. The left image is the discontinuous case, while right is the smooth.  Both are shown at $t=0$.}
         \label{fig:vk-7}
 \end{figure}
 
-For both benchmark cases, discontinuous and smooth, and both viscosity proportions, 0.1 and 0.01, the results are shown at the end time step number, 2000, in Fig.~\ref{fig:vk-8}.  This was generated using the original input parameter file, running the cases with 8 global refinement steps, and also adding the two-layer viscosity model.
+For both cases, discontinuous and smooth, and both viscosity proportions, 0.1 and 0.01, the results are shown at the end time step number, $t=2000$, in Fig.~\ref{fig:vk-8}.  This was generated using the original input parameter file, running the cases with 8 global refinements, and also adding the two-layer viscosity model.
 
 \begin{figure}
         \centering
         \includegraphics[width=0.5\textwidth]{cookbooks/benchmarks/van-keken/2viscosities-final.png}
-        \caption{\it Van Keken benchmark two-layer viscosity model at final time step number, 2000. These images show layers of different compositions and viscosities. Discontinuous cases are the left images, smooth cases are the right. The upper images are $\frac{\eta_{t}}{\eta_{b}}=0.1$, and the lower are $\frac{\eta_{t}}{\eta_{b}}=0.01$.}
+        \caption{\it Van Keken benchmark two-layer viscosity model at final time step number, $t=2000$. These images show layers of different compositions and viscosities. Discontinuous cases are the left images, smooth cases are the right. The upper images are $\frac{\eta_{t}}{\eta_{b}}=0.1$, and the lower are $\frac{\eta_{t}}{\eta_{b}}=0.01$.}
         \label{fig:vk-8}
 \end{figure}
 
-Compared to the results of the constant viscosity throughout the domain, the plumes rise faster when adding the two-layer viscosity model. Also, the larger the viscosity difference is, the earlier the plumes appear and the faster their ascent. To further reveal the effect of the two-layer viscosity model, we also plot the evolution of the fluids' average velocity over time, as shown in Fig.~\ref{fig:vk-9}.
+Compared to the results of the models using constant viscosity throughout the domain, the plumes rise faster when adding the two-layer viscosity. Also, the larger the viscosity difference is the earlier the plumes appear, and the faster their ascent. To further reveal the effect of the two-layer viscosity model, we also plot the evolution of the fluids' root mean square velocity over time, as shown in Fig.~\ref{fig:vk-9}.
 
 \begin{figure}
         \centering
@@ -9461,7 +9470,7 @@ ways, one of it being ParaView and shown in
 Fig.~\ref{fig:stokes-falling-sphere-2d} (an alternative is to use Visit as
 described in Section~\ref{sec:viz}; 3d images of this simulation using Visit
 are shown in Fig.~\ref{fig:stokes-falling-sphere-3d}).
-Here, Paraview has the advantage that you can calculate the average velocity
+Here, ParaView has the advantage that you can calculate the average velocity
 of the sphere using the following filters:
 \begin{enumerate}
  \item Threshold (Scalars: C\_1, Lower Threshold 0.5, Upper Threshold 1),
@@ -11069,7 +11078,7 @@ To give you some guidelines on how to write the section in the manual, you can f
   For representing data that deviates around zero, they recommend diverging color palettes
   where two different colors change in lightness and meet at an unsaturated color in the middle 
   such as ``BrBG'' and ``RdBu''. 
-  If you use a recent version of Paraview or VisIt, these color palettes are included with the preset
+  If you use a recent version of ParaView or VisIt, these color palettes are included with the preset
   color maps under the names given above, and you may want to choose one of these options rather than the default. 
 \item Finally, mention some ways the users could modify or extend the cookbook, such as
   parameters to vary to get new and interesting results, or to better understand
