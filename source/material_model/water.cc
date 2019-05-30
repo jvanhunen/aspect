@@ -31,6 +31,13 @@ namespace aspect
   namespace MaterialModel
   {
     template <int dim>
+    Water<dim>::
+    Water() 
+    : max_water_table{1.0}
+    {
+    }
+
+    template <int dim>
     double
     Water<dim>::
     reference_viscosity () const
@@ -62,15 +69,20 @@ namespace aspect
                    const double pressure,
                    const double bulkwater) const
     {
+      /* 
       const double p1 = 1.0e9;
       const double p2 = 1.2e9;
       const double p3 = 2.8e9;
       const double p4 = 3.0e9;
       const double maxwater1 = 0.10;
       const double maxwater2 = 0.01;
+      */
 
       double maxwater;
 
+      maxwater = max_water_table.get_data(Point<2> (pressure, temperature), 0);
+
+      /*
       if (pressure <= p1 || pressure >= p4)
           maxwater = maxwater1;
       else if (pressure <= p3 && pressure >= p2)
@@ -81,6 +93,7 @@ namespace aspect
     	  maxwater = maxwater1 + (maxwater2-maxwater1)*(p4-pressure)/(p4-p3);
 	  else
 		  maxwater = maxwater1;
+      */
 
       return bulkwater-maxwater;
     }
@@ -498,8 +511,12 @@ namespace aspect
         prm.leave_subsection();
       }
       prm.leave_subsection();
+      max_water_table.load_file("SP_water.dat", this->get_mpi_communicator());
+      double x = max_water_table.get_data(Point<2> (1.1e9, 1050), 0);
+      std::cout << "Interpolated maxwater at (1.1e9,1050)=" << x << std::endl;
+      double y = max_water_table.get_data(Point<2> (4.1e9, 1050), 0);
+      std::cout << "Interpolated maxwater at (4.1e9,1050)=" << y << std::endl;
     }
-
 
     template <int dim>
     void
