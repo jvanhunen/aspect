@@ -47,6 +47,7 @@ namespace aspect
     class Water : public MaterialModel::MeltInterface<dim>, public ::aspect::SimulatorAccess<dim>, public MaterialModel::MeltFractionModel<dim>
     {
       public:
+        Water();
         /**
          * Return whether the model is compressible or not.  Incompressibility
          * does not necessarily imply that the density is constant; rather, it
@@ -141,6 +142,7 @@ namespace aspect
         melt_fraction (const double temperature,
                        const double pressure,
                        const double depletion) const;
+        Utilities::AsciiDataLookup <2> max_water_table;
     };
 
   }
