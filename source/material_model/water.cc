@@ -472,6 +472,7 @@ namespace aspect
           melt_compressibility              = prm.get_double ("Melt compressibility");
           include_melting_and_freezing      = prm.get_bool ("Include melting and freezing");
           melting_time_scale                = prm.get_double ("Melting time scale for operator splitting");
+          water_lookup_table_name           = prm.get ("Water lookup table name");
 
           if (thermal_viscosity_exponent!=0.0 && reference_T == 0.0)
             AssertThrow(false, ExcMessage("Error: Material model Melt global with Thermal viscosity exponent can not have reference_T=0."));
@@ -511,11 +512,8 @@ namespace aspect
         prm.leave_subsection();
       }
       prm.leave_subsection();
-      max_water_table.load_file("SP_water.dat", this->get_mpi_communicator());
-      double x = max_water_table.get_data(Point<2> (1.1e9, 1050), 0);
-      std::cout << "Interpolated maxwater at (1.1e9,1050)=" << x << std::endl;
-      double y = max_water_table.get_data(Point<2> (4.1e9, 1050), 0);
-      std::cout << "Interpolated maxwater at (4.1e9,1050)=" << y << std::endl;
+      //max_water_table.load_file("SP_water.dat", this->get_mpi_communicator());
+      max_water_table.load_file(water_lookup_table_name, this->get_mpi_communicator());
     }
 
     template <int dim>

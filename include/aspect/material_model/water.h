@@ -133,6 +133,7 @@ namespace aspect
         double melt_compressibility;
         bool include_melting_and_freezing;
         double melting_time_scale;
+        std::string water_lookup_table_name;
 
         // entropy change upon melting
         double peridotite_melting_entropy_change;
