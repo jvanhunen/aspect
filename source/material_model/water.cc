@@ -69,31 +69,10 @@ namespace aspect
                    const double pressure,
                    const double bulkwater) const
     {
-      /* 
-      const double p1 = 1.0e9;
-      const double p2 = 1.2e9;
-      const double p3 = 2.8e9;
-      const double p4 = 3.0e9;
-      const double maxwater1 = 0.10;
-      const double maxwater2 = 0.01;
-      */
-
       double maxwater;
 
+      // Interpolate maximum rock water content from AsciiDataLookup table.
       maxwater = max_water_table.get_data(Point<2> (pressure, temperature), 0);
-
-      /*
-      if (pressure <= p1 || pressure >= p4)
-          maxwater = maxwater1;
-      else if (pressure <= p3 && pressure >= p2)
-          maxwater = maxwater2;
-      else if (pressure > p1 && pressure < p2)
-    	  maxwater = maxwater2 + (maxwater1-maxwater2)*(p2-pressure)/(p2-p1);
-	  else if (pressure > p3 && pressure < p4)
-    	  maxwater = maxwater1 + (maxwater2-maxwater1)*(p4-pressure)/(p4-p3);
-	  else
-		  maxwater = maxwater1;
-      */
 
       return bulkwater-maxwater;
     }
@@ -435,6 +414,10 @@ namespace aspect
                              "computed. If the model does not use operator splitting, this parameter is not used. "
                              "Units: yr or s, depending on the ``Use years "
                              "in output instead of seconds'' parameter.");
+          prm.declare_entry("Water lookup table name", "water.dat",
+                            Patterns::Anything (), 
+                            "The name of the file containing a lookup table for the amount of mineral-bound "
+                            "water (units:1) as a function of pressure (Pa) and temperature (K)");
         }
         prm.leave_subsection();
       }
