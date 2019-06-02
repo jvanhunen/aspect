@@ -140,7 +140,7 @@ namespace aspect
 
         virtual
         double
-        melt_fraction (const double temperature,
+        water_release (const double temperature,
                        const double pressure,
                        const double depletion) const;
         Utilities::AsciiDataLookup <2> max_water_table;
