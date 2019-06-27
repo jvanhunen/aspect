@@ -50,7 +50,7 @@ namespace aspect
     Water<dim>::
     reference_darcy_coefficient () const
     {
-      // 0.01 = 1% melt
+      // 0.01 = 1% fluid
       return reference_permeability * std::pow(0.01,3.0) / eta_f;
     }
 
@@ -65,35 +65,14 @@ namespace aspect
     template <int dim>
     double
     Water<dim>::
-    melt_fraction (const double temperature,
+    excess_water (const double temperature,
                    const double pressure,
                    const double bulkwater) const
     {
-      /* 
-      const double p1 = 1.0e9;
-      const double p2 = 1.2e9;
-      const double p3 = 2.8e9;
-      const double p4 = 3.0e9;
-      const double maxwater1 = 0.10;
-      const double maxwater2 = 0.01;
-      */
-
       double maxwater;
 
+      // Interpolate maximum rock water content from AsciiDataLookup table.  
       maxwater = max_water_table.get_data(Point<2> (pressure, temperature), 0);
-
-      /*
-      if (pressure <= p1 || pressure >= p4)
-          maxwater = maxwater1;
-      else if (pressure <= p3 && pressure >= p2)
-          maxwater = maxwater2;
-      else if (pressure > p1 && pressure < p2)
-    	  maxwater = maxwater2 + (maxwater1-maxwater2)*(p2-pressure)/(p2-p1);
-	  else if (pressure > p3 && pressure < p4)
-    	  maxwater = maxwater1 + (maxwater2-maxwater1)*(p4-pressure)/(p4-p3);
-	  else
-		  maxwater = maxwater1;
-      */
 
       return bulkwater-maxwater;
     }
@@ -112,10 +91,10 @@ namespace aspect
           if (this->include_melt_transport())
             {
               const unsigned int porosity_idx = this->introspection().compositional_index_for_name("porosity");
-              const unsigned int peridotite_idx = this->introspection().compositional_index_for_name("peridotite");
-              bulkwater = in.composition[q][peridotite_idx] + in.composition[q][porosity_idx];
+              const unsigned int bulk_water_idx = this->introspection().compositional_index_for_name("bulk_water");
+              bulkwater = in.composition[q][bulk_water_idx] + in.composition[q][porosity_idx];
             }
-          melt_fractions[q] = this->melt_fraction(in.temperature[q],
+          melt_fractions[q] = this->excess_water(in.temperature[q],
                                                   std::max(0.0, in.pressure[q]),
                                                   bulkwater);
         }
@@ -168,34 +147,29 @@ namespace aspect
           else
             temperature_dependence -= (in.temperature[i] - reference_T) * thermal_expansivity;
 
-          // calculate composition dependence of density
-          const double delta_rho = this->introspection().compositional_name_exists("peridotite")
-                                   ?
-                                   depletion_density_change * in.composition[i][this->introspection().compositional_index_for_name("peridotite")]
-                                   :
-                                   0.0;
+          // calculate composition dependence of density -> not yet implemented: probably needs another lookup table
+          const double delta_rho = 0.0;
           out.densities[i] = (reference_rho_s + delta_rho) * temperature_dependence
                              * std::exp(compressibility * (in.pressure[i] - this->get_surface_pressure()));
 
           if (this->include_melt_transport() && include_melting_and_freezing && in.strain_rate.size())
             {
-              AssertThrow(this->introspection().compositional_name_exists("peridotite"),
+              AssertThrow(this->introspection().compositional_name_exists("bulk_water"),
                           ExcMessage("Material model Water only works if there is a "
-                                     "compositional field called peridotite."));
+                                     "compositional field called bulk_water."));
               AssertThrow(this->introspection().compositional_name_exists("porosity"),
-                          ExcMessage("Material model Water with melt transport only "
+                          ExcMessage("Material model Water with fluid transport only "
                                      "works if there is a compositional field called porosity."));
               const unsigned int porosity_idx = this->introspection().compositional_index_for_name("porosity");
-              const unsigned int peridotite_idx = this->introspection().compositional_index_for_name("peridotite");
+              const unsigned int bulk_water_idx = this->introspection().compositional_index_for_name("bulk_water");
 
-              // Calculate the melting rate as difference between the equilibrium melt fraction
+              // Calculate the water release rate as difference between the maximum mineral-bound fluid fraction
               // and the solution of the previous time step (or the current solution, in case
               // operator splitting is used).
-              // The solidus is lowered by previous melting events (fractional melting).
-              const double eq_melt_fraction = melt_fraction(in.temperature[i],
+              const double new_porosity = excess_water(in.temperature[i],
                                                             this->get_adiabatic_conditions().pressure(in.position[i]),
-                                                            in.composition[i][peridotite_idx] + in.composition[i][porosity_idx]);
-              double porosity_change = eq_melt_fraction - old_porosity[i];
+                                                            in.composition[i][bulk_water_idx] + in.composition[i][porosity_idx]);
+              double porosity_change = new_porosity - old_porosity[i];
 
               // do not allow negative porosity
               if (old_porosity[i] + porosity_change < 0)
@@ -203,9 +177,9 @@ namespace aspect
 
               for (unsigned int c=0; c<in.composition[i].size(); ++c)
                 {
-                  if (c == peridotite_idx && this->get_timestep_number() > 1)
+                  if (c == bulk_water_idx && this->get_timestep_number() > 1)
                     out.reaction_terms[i][c] = porosity_change
-                                               - in.composition[i][peridotite_idx] * trace(in.strain_rate[i]) * this->get_timestep();
+                                               - in.composition[i][bulk_water_idx] * trace(in.strain_rate[i]) * this->get_timestep();
                   else if (c == porosity_idx && this->get_timestep_number() > 1)
                     out.reaction_terms[i][c] = porosity_change
                                                * out.densities[i] / this->get_timestep();
@@ -217,11 +191,11 @@ namespace aspect
                     {
                       if (reaction_rate_out != NULL)
                         {
-                          if (c == peridotite_idx && this->get_timestep_number() > 0)
-                            reaction_rate_out->reaction_rates[i][c] = -porosity_change / melting_time_scale
-                                                                      +  in.composition[i][peridotite_idx] * trace(in.strain_rate[i]);
+                          if (c == bulk_water_idx && this->get_timestep_number() > 0)
+                            reaction_rate_out->reaction_rates[i][c] = -porosity_change / reaction_time_scale
+                                                                      +  in.composition[i][bulk_water_idx] * trace(in.strain_rate[i]);
                           else if (c == porosity_idx && this->get_timestep_number() > 0)
-                            reaction_rate_out->reaction_rates[i][c] = porosity_change / melting_time_scale;
+                            reaction_rate_out->reaction_rates[i][c] = porosity_change / reaction_time_scale;
                           else
                             reaction_rate_out->reaction_rates[i][c] = 0.0;
                         }
@@ -376,11 +350,9 @@ namespace aspect
                              "Units: $m^2$.");
           prm.declare_entry ("Depletion density change", "0.0",
                              Patterns::Double (),
-                             "The density contrast between material with a depletion of 1 and a "
-                             "depletion of zero. Negative values indicate lower densities of "
-                             "depleted material. Depletion is indicated by the compositional "
-                             "field with the name peridotite. Not used if this field does not "
-                             "exist in the model. "
+                             "The density contrast between material with a (hypothetical) bulk_water content of 1 and a "
+                             "bulk water content of zero. Bulk rock water content is indicated by the compositional "
+                             "field with the name bulk_water. This field must be defined in the model. "
                              "Units: $kg/m^3$.");
           prm.declare_entry ("Surface solidus", "1300",
                              Patterns::Double (0),
@@ -417,7 +389,7 @@ namespace aspect
                              "Whether to include melting and freezing (according to a simplified "
                              "linear melting approximation in the model (if true), or not (if "
                              "false).");
-          prm.declare_entry ("Melting time scale for operator splitting", "1e3",
+          prm.declare_entry ("Reaction time scale for operator splitting", "1e3",
                              Patterns::Double (0),
                              "In case the operator splitting scheme is used, the porosity field can not "
                              "be set to a new equilibrium melt fraction instantly, but the model has to "
@@ -435,6 +407,10 @@ namespace aspect
                              "computed. If the model does not use operator splitting, this parameter is not used. "
                              "Units: yr or s, depending on the ``Use years "
                              "in output instead of seconds'' parameter.");
+          prm.declare_entry("Water lookup table name", "water.dat",
+                            Patterns::Anything (), 
+                            "The name of the file containing a lookup table for the amount of mineral-bound "
+                            "water (units:1) as a function of pressure (Pa) and temperature (K)");
         }
         prm.leave_subsection();
       }
@@ -471,23 +447,24 @@ namespace aspect
           compressibility                   = prm.get_double ("Solid compressibility");
           melt_compressibility              = prm.get_double ("Melt compressibility");
           include_melting_and_freezing      = prm.get_bool ("Include melting and freezing");
-          melting_time_scale                = prm.get_double ("Melting time scale for operator splitting");
+          reaction_time_scale                = prm.get_double ("Reaction time scale for operator splitting");
+          water_lookup_table_name           = prm.get ("Water lookup table name");
 
           if (thermal_viscosity_exponent!=0.0 && reference_T == 0.0)
             AssertThrow(false, ExcMessage("Error: Material model Melt global with Thermal viscosity exponent can not have reference_T=0."));
 
           if (this->convert_output_to_years() == true)
-            melting_time_scale *= year_in_seconds;
+            reaction_time_scale *= year_in_seconds;
 
           if (this->get_parameters().use_operator_splitting)
             {
-              AssertThrow(melting_time_scale >= this->get_parameters().reaction_time_step,
+              AssertThrow(reaction_time_scale >= this->get_parameters().reaction_time_step,
                           ExcMessage("The reaction time step " + Utilities::to_string(this->get_parameters().reaction_time_step)
                                      + " in the operator splitting scheme is too large to compute melting rates! "
                                      "You have to choose it in such a way that it is smaller than the 'Melting time scale for "
                                      "operator splitting' chosen in the material model, which is currently "
-                                     + Utilities::to_string(melting_time_scale) + "."));
-              AssertThrow(melting_time_scale > 0,
+                                     + Utilities::to_string(reaction_time_scale) + "."));
+              AssertThrow(reaction_time_scale > 0,
                           ExcMessage("The Melting time scale for operator splitting must be larger than 0!"));
               AssertThrow(this->introspection().compositional_name_exists("porosity"),
                           ExcMessage("Material model Melt global with melt transport only "
@@ -501,9 +478,9 @@ namespace aspect
                                      "works if there is a compositional field called porosity."));
               if (include_melting_and_freezing)
                 {
-                  AssertThrow(this->introspection().compositional_name_exists("peridotite"),
+                  AssertThrow(this->introspection().compositional_name_exists("bulk_water"),
                               ExcMessage("Material model Melt global only works if there is a "
-                                         "compositional field called peridotite."));
+                                         "compositional field called bulk_water."));
                 }
             }
 
@@ -511,11 +488,8 @@ namespace aspect
         prm.leave_subsection();
       }
       prm.leave_subsection();
-      max_water_table.load_file("SP_water.dat", this->get_mpi_communicator());
-      double x = max_water_table.get_data(Point<2> (1.1e9, 1050), 0);
-      std::cout << "Interpolated maxwater at (1.1e9,1050)=" << x << std::endl;
-      double y = max_water_table.get_data(Point<2> (4.1e9, 1050), 0);
-      std::cout << "Interpolated maxwater at (4.1e9,1050)=" << y << std::endl;
+      //max_water_table.load_file("SP_water.dat", this->get_mpi_communicator());
+      max_water_table.load_file(water_lookup_table_name, this->get_mpi_communicator());
     }
 
     template <int dim>

@@ -132,14 +132,15 @@ namespace aspect
         double compressibility;
         double melt_compressibility;
         bool include_melting_and_freezing;
-        double melting_time_scale;
+        double reaction_time_scale;
+        std::string water_lookup_table_name;
 
         // entropy change upon melting
         double peridotite_melting_entropy_change;
 
         virtual
         double
-        melt_fraction (const double temperature,
+        excess_water (const double temperature,
                        const double pressure,
                        const double depletion) const;
         Utilities::AsciiDataLookup <2> max_water_table;
