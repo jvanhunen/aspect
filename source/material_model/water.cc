@@ -71,7 +71,7 @@ namespace aspect
     {
       double maxwater;
 
-      // Interpolate maximum rock water content from AsciiDataLookup table. 
+      // Interpolate maximum rock water content from AsciiDataLookup table.  
       maxwater = max_water_table.get_data(Point<2> (pressure, temperature), 0);
 
       return bulkwater-maxwater;
