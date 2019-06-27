@@ -562,7 +562,7 @@ namespace aspect
          * therefore when using this constructor it is necessary to provide
          * this list in the first uncommented line of the data file.
          */
-        AsciiDataLookup(const double scale_factor);
+        explicit AsciiDataLookup(const double scale_factor);
 
         /**
          * Loads a data text file. Throws an exception if the file does not
@@ -579,7 +579,9 @@ namespace aspect
          *
          * @param position The current position to compute the data (velocity,
          * temperature, etc.)
-         * @param component The index of the data column to be returned.
+         * @param component The index (starting at 0) of the data column to be
+         * returned. The index is therefore less than the number of data
+         * columns in the data file (or specified in the constructor).
          */
         double
         get_data(const Point<dim> &position,
@@ -939,6 +941,85 @@ namespace aspect
     };
 
 
+    /**
+     * A base class that implements conditions determined from a
+     * layered AsciiData input file.
+     */
+    template <int dim>
+    class AsciiDataLayered : public Utilities::AsciiDataBase<dim>, public SimulatorAccess<dim>
+    {
+      public:
+        /**
+         * Constructor
+         */
+        AsciiDataLayered();
+
+        /**
+         * Initialization function. This function is called once at the
+         * beginning of the program. Checks preconditions.
+         */
+        virtual
+        void
+        initialize (const unsigned int components);
+
+
+        /**
+         * Returns the data component at the given position.
+         */
+        double
+        get_data_component (const Point<dim> &position,
+                            const unsigned int component) const;
+
+
+        /**
+         * Declare the parameters all derived classes take from input files.
+         */
+        static
+        void
+        declare_parameters (ParameterHandler  &prm,
+                            const std::string &default_directory,
+                            const std::string &default_filename,
+                            const std::string &subsection_name = "Ascii data model");
+
+        /**
+         * Read the parameters from the parameter file.
+         */
+        void
+        parse_parameters (ParameterHandler &prm,
+                          const std::string &subsection_name = "Ascii data model");
+
+      protected:
+        /**
+         * Pointer to an object that reads and processes data we get from text
+         * files.
+         */
+        std::vector<std::unique_ptr<aspect::Utilities::AsciiDataLookup<dim-1> >> lookups;
+
+      private:
+
+        /**
+         * Directory in which the data files are present.
+         */
+        std::string data_directory;
+
+        /**
+         * Filenames of data files.
+         */
+        std::vector<std::string> data_file_names;
+
+        /**
+         * Number of layer boundaries in the model.
+         */
+        unsigned int number_of_layer_boundaries;
+
+        /**
+         * Interpolation scheme for profile averaging.
+         */
+        std::string interpolation_scheme;
+
+
+    };
+
 
     /**
      * A base class that reads in a data profile and provides its values.
@@ -1160,6 +1241,11 @@ namespace aspect
      * entry in the list must match one of the allowed operations.
      */
     std::vector<Operator> create_model_operator_list(const std::vector<std::string> &operator_names);
+
+    /**
+     * Create a string of model operators for use in declare_parameters
+     */
+    const std::string get_model_operator_options();
 
     /**
      * A function that returns a SymmetricTensor, whose entries are zero, except for

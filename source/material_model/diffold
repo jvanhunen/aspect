@@ -1,0 +1,222 @@
+22c22
+< #include <aspect/material_model/water.h>
+---
+> #include <aspect/material_model/melt_global.h>
+34,40d33
+<     Water<dim>::
+<     Water() 
+<     : max_water_table{1.0}
+<     {
+<     }
+< 
+<     template <int dim>
+42c35
+<     Water<dim>::
+---
+>     MeltGlobal<dim>::
+50c43
+<     Water<dim>::
+---
+>     MeltGlobal<dim>::
+59c52
+<     Water<dim>::
+---
+>     MeltGlobal<dim>::
+67c60
+<     Water<dim>::
+---
+>     MeltGlobal<dim>::
+70c63
+<                    const double bulkwater) const
+---
+>                    const double depletion) const
+72,96c65,76
+<       /* 
+<       const double p1 = 1.0e9;
+<       const double p2 = 1.2e9;
+<       const double p3 = 2.8e9;
+<       const double p4 = 3.0e9;
+<       const double maxwater1 = 0.10;
+<       const double maxwater2 = 0.01;
+<       */
+< 
+<       double maxwater;
+< 
+<       maxwater = max_water_table.get_data(Point<2> (pressure, temperature), 0);
+< 
+<       /*
+<       if (pressure <= p1 || pressure >= p4)
+<           maxwater = maxwater1;
+<       else if (pressure <= p3 && pressure >= p2)
+<           maxwater = maxwater2;
+<       else if (pressure > p1 && pressure < p2)
+<     	  maxwater = maxwater2 + (maxwater1-maxwater2)*(p2-pressure)/(p2-p1);
+< 	  else if (pressure > p3 && pressure < p4)
+<     	  maxwater = maxwater1 + (maxwater2-maxwater1)*(p4-pressure)/(p4-p3);
+< 	  else
+< 		  maxwater = maxwater1;
+<       */
+---
+>       const double T_solidus  = surface_solidus
+>                                 + pressure_solidus_change * pressure
+>                                 + std::max(depletion_solidus_change * depletion, -200.0);
+>       const double T_liquidus = T_solidus + 500.0;
+> 
+>       double melt_fraction;
+>       if (temperature < T_solidus)
+>         melt_fraction = 0.0;
+>       else if (temperature > T_liquidus)
+>         melt_fraction = 1.0;
+>       else
+>         melt_fraction = (temperature - T_solidus) / (T_liquidus - T_solidus);
+98c78
+<       return bulkwater-maxwater;
+---
+>       return melt_fraction;
+104c84
+<     Water<dim>::
+---
+>     MeltGlobal<dim>::
+108c88
+<       double bulkwater = 0.0;
+---
+>       double depletion = 0.0;
+116c96
+<               bulkwater = in.composition[q][peridotite_idx] + in.composition[q][porosity_idx];
+---
+>               depletion = in.composition[q][peridotite_idx] - in.composition[q][porosity_idx];
+120c100
+<                                                   bulkwater);
+---
+>                                                   depletion);
+121a102
+>       return;
+127c108
+<     Water<dim>::
+---
+>     MeltGlobal<dim>::
+144c125
+<                       ExcMessage("Material model Water only "
+---
+>                       ExcMessage("Material model Melt simple with melt transport only "
+183c164
+<                           ExcMessage("Material model Water only works if there is a "
+---
+>                           ExcMessage("Material model Melt simple only works if there is a "
+186c167
+<                           ExcMessage("Material model Water with melt transport only "
+---
+>                           ExcMessage("Material model Melt simple with melt transport only "
+197c178
+<                                                             in.composition[i][peridotite_idx] + in.composition[i][porosity_idx]);
+---
+>                                                             in.composition[i][peridotite_idx] - in.composition[i][porosity_idx]);
+218c199
+<                       if (reaction_rate_out != NULL)
+---
+>                       if (reaction_rate_out != nullptr)
+221,222c202,203
+<                             reaction_rate_out->reaction_rates[i][c] = -porosity_change / melting_time_scale
+<                                                                       +  in.composition[i][peridotite_idx] * trace(in.strain_rate[i]);
+---
+>                             reaction_rate_out->reaction_rates[i][c] = porosity_change / melting_time_scale
+>                                                                       - in.composition[i][peridotite_idx] * trace(in.strain_rate[i]);
+233c214,222
+<               out.viscosities[i] = eta_0 * exp(- alpha_phi * porosity);
+---
+> 
+>               // find depletion = peridotite, which might affect shear viscosity:
+>               const double depletion_visc = std::min(1.0, std::max(in.composition[i][peridotite_idx],0.0));
+> 
+>               // calculate strengthening due to depletion:
+>               const double depletion_strengthening = std::min(exp(alpha_depletion*depletion_visc),delta_eta_depletion_max);
+> 
+>               // calculate viscosity change due to local melt and depletion:
+>               out.viscosities[i] = eta_0 * exp(- alpha_phi * porosity) * depletion_strengthening;
+244c233
+<                   if (this->get_parameters().use_operator_splitting && reaction_rate_out != NULL)
+---
+>                   if (this->get_parameters().use_operator_splitting && reaction_rate_out != nullptr)
+317c306
+<     Water<dim>::declare_parameters (ParameterHandler &prm)
+---
+>     MeltGlobal<dim>::declare_parameters (ParameterHandler &prm)
+321c310
+<         prm.enter_subsection("Water");
+---
+>         prm.enter_subsection("Melt global");
+437a427,444
+>           prm.declare_entry ("Exponential depletion strengthening factor", "0.0",
+>                              Patterns::Double (0),
+>                              "$\\alpha_F$: exponential dependency of viscosity on the depletion "
+>                              "field $F$ (called peridotite). "
+>                              "Dimensionless factor. With a value of 0.0 (the default) the "
+>                              "viscosity does not depend on the depletion. The effective viscosity increase"
+>                              "due to depletion is defined as $exp( \\alpha_F * F)$. "
+>                              "Rationale: melting dehydrates the source rock by removing most of the volatiles,"
+>                              "and makes it stronger. Hirth and Kohlstedt (1996) report typical values around a "
+>                              "factor 100 to 1000 viscosity contrast between wet and dry rocks, although some "
+>                              "experimental studies report a smaller (factor 10) contrast (e.g. Fei et al., 2013).");
+>           prm.declare_entry ("Maximum Depletion viscosity change", "1.0e3",
+>                              Patterns::Double (0),
+>                              "$\\Delta \\eta_{F,max}$: maximum depletion strengthening of viscosity. "
+>                              "Rationale: melting dehydrates the source rock by removing most of the volatiles,"
+>                              "and makes it stronger. Hirth and Kohlstedt (1996) report typical values around a "
+>                              "factor 100 to 1000 viscosity contrast between wet and dry rocks, although some "
+>                              "experimental studies report a smaller (factor 10) contrast (e.g. Fei et al., 2013).");
+448c455
+<     Water<dim>::parse_parameters (ParameterHandler &prm)
+---
+>     MeltGlobal<dim>::parse_parameters (ParameterHandler &prm)
+452c459
+<         prm.enter_subsection("Water");
+---
+>         prm.enter_subsection("Melt global");
+474a482,483
+>           alpha_depletion                   = prm.get_double ("Exponential depletion strengthening factor");
+>           delta_eta_depletion_max           = prm.get_double ("Maximum Depletion viscosity change");
+477c486
+<             AssertThrow(false, ExcMessage("Error: Material model Melt global with Thermal viscosity exponent can not have reference_T=0."));
+---
+>             AssertThrow(false, ExcMessage("Error: Material model Melt simple with Thermal viscosity exponent can not have reference_T=0."));
+492,494d500
+<               AssertThrow(this->introspection().compositional_name_exists("porosity"),
+<                           ExcMessage("Material model Melt global with melt transport only "
+<                                      "works if there is a compositional field called porosity."));
+496,509d501
+< 
+<           if (this->include_melt_transport())
+<             {
+<               AssertThrow(this->introspection().compositional_name_exists("porosity"),
+<                           ExcMessage("Material model Melt global with melt transport only "
+<                                      "works if there is a compositional field called porosity."));
+<               if (include_melting_and_freezing)
+<                 {
+<                   AssertThrow(this->introspection().compositional_name_exists("peridotite"),
+<                               ExcMessage("Material model Melt global only works if there is a "
+<                                          "compositional field called peridotite."));
+<                 }
+<             }
+< 
+514,518d505
+<       max_water_table.load_file("SP_water.dat", this->get_mpi_communicator());
+<       double x = max_water_table.get_data(Point<2> (1.1e9, 1050), 0);
+<       std::cout << "Interpolated maxwater at (1.1e9,1050)=" << x << std::endl;
+<       double y = max_water_table.get_data(Point<2> (4.1e9, 1050), 0);
+<       std::cout << "Interpolated maxwater at (4.1e9,1050)=" << y << std::endl;
+520a508
+> 
+523c511
+<     Water<dim>::create_additional_named_outputs (MaterialModel::MaterialModelOutputs<dim> &out) const
+---
+>     MeltGlobal<dim>::create_additional_named_outputs (MaterialModel::MaterialModelOutputs<dim> &out) const
+530c518
+<             std_cxx14::make_unique<MaterialModel::ReactionRateOutputs<dim>> (n_points, this->n_compositional_fields()));
+---
+>             std::make_shared<MaterialModel::ReactionRateOutputs<dim>> (n_points, this->n_compositional_fields()));
+541,542c529,530
+<     ASPECT_REGISTER_MATERIAL_MODEL(Water,
+<                                    "water",
+---
+>     ASPECT_REGISTER_MATERIAL_MODEL(MeltGlobal,
+>                                    "melt global",
