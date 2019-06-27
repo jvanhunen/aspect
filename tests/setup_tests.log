@@ -1,0 +1,9 @@
+-- Setting up tests with CMAKE_BUILD_TYPE Release
+-- ** processing test quick_mpi:
+-- Setting up plugin:
+--   name <quick_mpi>
+--   using ASPECT_DIR /Users/Jeroen/Box Sync/ASPECT/src/aspect
+--   in Release mode
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /Users/Jeroen/Box Sync/ASPECT/src/aspect/tests

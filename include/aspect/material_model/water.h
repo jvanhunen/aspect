@@ -132,7 +132,7 @@ namespace aspect
         double compressibility;
         double melt_compressibility;
         bool include_melting_and_freezing;
-        double melting_time_scale;
+        double reaction_time_scale;
         std::string water_lookup_table_name;
 
         // entropy change upon melting

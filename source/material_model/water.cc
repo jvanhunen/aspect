@@ -50,7 +50,7 @@ namespace aspect
     Water<dim>::
     reference_darcy_coefficient () const
     {
-      // 0.01 = 1% melt
+      // 0.01 = 1% fluid
       return reference_permeability * std::pow(0.01,3.0) / eta_f;
     }
 
@@ -65,7 +65,7 @@ namespace aspect
     template <int dim>
     double
     Water<dim>::
-    water_release (const double temperature,
+    excess_water (const double temperature,
                    const double pressure,
                    const double bulkwater) const
     {
@@ -94,7 +94,7 @@ namespace aspect
               const unsigned int bulk_water_idx = this->introspection().compositional_index_for_name("bulk_water");
               bulkwater = in.composition[q][bulk_water_idx] + in.composition[q][porosity_idx];
             }
-          melt_fractions[q] = this->water_release(in.temperature[q],
+          melt_fractions[q] = this->excess_water(in.temperature[q],
                                                   std::max(0.0, in.pressure[q]),
                                                   bulkwater);
         }
@@ -147,12 +147,8 @@ namespace aspect
           else
             temperature_dependence -= (in.temperature[i] - reference_T) * thermal_expansivity;
 
-          // calculate composition dependence of density
-          const double delta_rho = this->introspection().compositional_name_exists("bulk_water")
-                                   ?
-                                   depletion_density_change * in.composition[i][this->introspection().compositional_index_for_name("bulk_water")]
-                                   :
-                                   0.0;
+          // calculate composition dependence of density -> not yet implemented: probably needs another lookup table
+          const double delta_rho = 0.0;
           out.densities[i] = (reference_rho_s + delta_rho) * temperature_dependence
                              * std::exp(compressibility * (in.pressure[i] - this->get_surface_pressure()));
 
@@ -162,19 +158,18 @@ namespace aspect
                           ExcMessage("Material model Water only works if there is a "
                                      "compositional field called bulk_water."));
               AssertThrow(this->introspection().compositional_name_exists("porosity"),
-                          ExcMessage("Material model Water with melt transport only "
+                          ExcMessage("Material model Water with fluid transport only "
                                      "works if there is a compositional field called porosity."));
               const unsigned int porosity_idx = this->introspection().compositional_index_for_name("porosity");
               const unsigned int bulk_water_idx = this->introspection().compositional_index_for_name("bulk_water");
 
-              // Calculate the melting rate as difference between the equilibrium melt fraction
+              // Calculate the water release rate as difference between the maximum mineral-bound fluid fraction
               // and the solution of the previous time step (or the current solution, in case
               // operator splitting is used).
-              // The solidus is lowered by previous melting events (fractional melting).
-              const double eq_melt_fraction = water_release(in.temperature[i],
+              const double new_porosity = excess_water(in.temperature[i],
                                                             this->get_adiabatic_conditions().pressure(in.position[i]),
                                                             in.composition[i][bulk_water_idx] + in.composition[i][porosity_idx]);
-              double porosity_change = eq_melt_fraction - old_porosity[i];
+              double porosity_change = new_porosity - old_porosity[i];
 
               // do not allow negative porosity
               if (old_porosity[i] + porosity_change < 0)
@@ -197,10 +192,10 @@ namespace aspect
                       if (reaction_rate_out != NULL)
                         {
                           if (c == bulk_water_idx && this->get_timestep_number() > 0)
-                            reaction_rate_out->reaction_rates[i][c] = -porosity_change / melting_time_scale
+                            reaction_rate_out->reaction_rates[i][c] = -porosity_change / reaction_time_scale
                                                                       +  in.composition[i][bulk_water_idx] * trace(in.strain_rate[i]);
                           else if (c == porosity_idx && this->get_timestep_number() > 0)
-                            reaction_rate_out->reaction_rates[i][c] = porosity_change / melting_time_scale;
+                            reaction_rate_out->reaction_rates[i][c] = porosity_change / reaction_time_scale;
                           else
                             reaction_rate_out->reaction_rates[i][c] = 0.0;
                         }
@@ -394,7 +389,7 @@ namespace aspect
                              "Whether to include melting and freezing (according to a simplified "
                              "linear melting approximation in the model (if true), or not (if "
                              "false).");
-          prm.declare_entry ("Melting time scale for operator splitting", "1e3",
+          prm.declare_entry ("Reaction time scale for operator splitting", "1e3",
                              Patterns::Double (0),
                              "In case the operator splitting scheme is used, the porosity field can not "
                              "be set to a new equilibrium melt fraction instantly, but the model has to "
@@ -452,24 +447,24 @@ namespace aspect
           compressibility                   = prm.get_double ("Solid compressibility");
           melt_compressibility              = prm.get_double ("Melt compressibility");
           include_melting_and_freezing      = prm.get_bool ("Include melting and freezing");
-          melting_time_scale                = prm.get_double ("Melting time scale for operator splitting");
+          reaction_time_scale                = prm.get_double ("Reaction time scale for operator splitting");
           water_lookup_table_name           = prm.get ("Water lookup table name");
 
           if (thermal_viscosity_exponent!=0.0 && reference_T == 0.0)
             AssertThrow(false, ExcMessage("Error: Material model Melt global with Thermal viscosity exponent can not have reference_T=0."));
 
           if (this->convert_output_to_years() == true)
-            melting_time_scale *= year_in_seconds;
+            reaction_time_scale *= year_in_seconds;
 
           if (this->get_parameters().use_operator_splitting)
             {
-              AssertThrow(melting_time_scale >= this->get_parameters().reaction_time_step,
+              AssertThrow(reaction_time_scale >= this->get_parameters().reaction_time_step,
                           ExcMessage("The reaction time step " + Utilities::to_string(this->get_parameters().reaction_time_step)
                                      + " in the operator splitting scheme is too large to compute melting rates! "
                                      "You have to choose it in such a way that it is smaller than the 'Melting time scale for "
                                      "operator splitting' chosen in the material model, which is currently "
-                                     + Utilities::to_string(melting_time_scale) + "."));
-              AssertThrow(melting_time_scale > 0,
+                                     + Utilities::to_string(reaction_time_scale) + "."));
+              AssertThrow(reaction_time_scale > 0,
                           ExcMessage("The Melting time scale for operator splitting must be larger than 0!"));
               AssertThrow(this->introspection().compositional_name_exists("porosity"),
                           ExcMessage("Material model Melt global with melt transport only "
