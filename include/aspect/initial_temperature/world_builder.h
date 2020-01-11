@@ -18,7 +18,7 @@
   <http://www.gnu.org/licenses/>.
 */
 
-#ifdef ASPECT_USE_WORLD_BUILDER
+#ifdef ASPECT_WITH_WORLD_BUILDER
 #ifndef _aspect_initial_temperature_world_builder_h
 #define _aspect_initial_temperature_world_builder_h
 
@@ -49,10 +49,18 @@ namespace aspect
         WorldBuilder ();
 
         /**
-         * Return the initial temperature as a function of position.
+         * Initialization function. This function is called once at the
+         * beginning of the program after parse_parameters is run and after
+         * the SimulatorAccess (if applicable) is initialized.
          */
         virtual
-        double initial_temperature (const Point<dim> &position) const;
+        void
+        initialize ();
+
+        /**
+         * Return the initial temperature as a function of position.
+         */
+        double initial_temperature (const Point<dim> &position) const override;
 
     };
   }

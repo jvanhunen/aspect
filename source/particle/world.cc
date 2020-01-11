@@ -211,11 +211,7 @@ namespace aspect
               types::particle_index particles_to_add_locally = 0;
 
               // Loop over all cells and determine the number of particles to generate
-              typename DoFHandler<dim>::active_cell_iterator
-              cell = this->get_dof_handler().begin_active(),
-              endc = this->get_dof_handler().end();
-
-              for (; cell!=endc; ++cell)
+              for (const auto &cell : this->get_dof_handler().active_cell_iterators())
                 if (cell->is_locally_owned())
                   {
                     const unsigned int particles_in_cell = particle_handler->n_particles_in_cell(cell);
@@ -254,11 +250,7 @@ namespace aspect
           boost::mt19937 random_number_generator;
 
           // Loop over all cells and generate or remove the particles cell-wise
-          typename DoFHandler<dim>::active_cell_iterator
-          cell = this->get_dof_handler().begin_active(),
-          endc = this->get_dof_handler().end();
-
-          for (; cell!=endc; ++cell)
+          for (const auto &cell : this->get_dof_handler().active_cell_iterators())
             if (cell->is_locally_owned())
               {
                 const unsigned int n_particles_in_cell = particle_handler->n_particles_in_cell(cell);
@@ -373,41 +365,50 @@ namespace aspect
       // If the geometry is not a box, we simply discard particles that have left the
       // model domain.
 
-      const GeometryModel::Box<dim> *geometry
-        = dynamic_cast<const GeometryModel::Box<dim>*> (&this->get_geometry_model());
-
-      if (geometry != nullptr)
+      if (Plugins::plugin_type_matches<const GeometryModel::Box<dim>> (this->get_geometry_model()))
         {
-          const Point<dim> origin = geometry->get_origin();
-          const Point<dim> extent = geometry->get_extents();
+          const GeometryModel::Box<dim> &geometry
+            = Plugins::get_plugin_as_type<const GeometryModel::Box<dim>>(this->get_geometry_model());
+
+          const Point<dim> origin = geometry.get_origin();
+          const Point<dim> extent = geometry.get_extents();
           const std::set< std::pair< std::pair<types::boundary_id, types::boundary_id>, unsigned int> > periodic_boundaries =
-            geometry->get_periodic_boundary_pairs();
+            geometry.get_periodic_boundary_pairs();
 
-          const std::map<types::subdomain_id, unsigned int> subdomain_to_neighbor_map(get_subdomain_id_to_neighbor_map());
-
-          std::vector<bool> periodic(dim,false);
-          std::set< std::pair< std::pair<types::boundary_id, types::boundary_id>, unsigned int> >::const_iterator boundary =
-            periodic_boundaries.begin();
-          for (; boundary != periodic_boundaries.end(); ++boundary)
-            periodic[boundary->second] = true;
-
-          typename ParticleHandler<dim>::particle_iterator particle = particle_handler->begin();
-          for (; particle != particle_handler->end(); ++particle)
+          if (periodic_boundaries.size() != 0)
             {
-              // modify the particle position if it crossed a periodic boundary
-              Point<dim> particle_position = particle->get_location();
-              for (unsigned int i = 0; i < dim; ++i)
+              const std::map<types::subdomain_id, unsigned int> subdomain_to_neighbor_map(get_subdomain_id_to_neighbor_map());
+
+              std::vector<bool> periodic(dim,false);
+              std::set< std::pair< std::pair<types::boundary_id, types::boundary_id>, unsigned int> >::const_iterator boundary =
+                periodic_boundaries.begin();
+              for (; boundary != periodic_boundaries.end(); ++boundary)
+                periodic[boundary->second] = true;
+
+              typename ParticleHandler<dim>::particle_iterator particle = particle_handler->begin();
+              for (; particle != particle_handler->end(); ++particle)
                 {
-                  if (periodic[i])
+                  // modify the particle position if it crossed a periodic boundary
+                  Point<dim> particle_position = particle->get_location();
+                  for (unsigned int i = 0; i < dim; ++i)
                     {
-                      if (particle_position[i] < origin[i])
-                        particle_position[i] += extent[i];
-                      else if (particle_position[i] > origin[i] + extent[i])
-                        particle_position[i] -= extent[i];
+                      if (periodic[i])
+                        {
+                          if (particle_position[i] < origin[i])
+                            particle_position[i] += extent[i];
+                          else if (particle_position[i] > origin[i] + extent[i])
+                            particle_position[i] -= extent[i];
+                        }
                     }
+                  particle->set_location(particle_position);
                 }
-              particle->set_location(particle_position);
             }
+        }
+      else
+        {
+          AssertThrow(this->get_geometry_model().get_periodic_boundary_pairs().size() == 0,
+                      ExcMessage("Periodic boundaries combined with particles currently "
+                                 "only work with box geometry models."));
         }
     }
 
@@ -612,11 +613,7 @@ namespace aspect
           particle_handler->get_property_pool().reserve(2 * particle_handler->n_locally_owned_particles());
 
           // Loop over all cells and initialize the particles cell-wise
-          typename DoFHandler<dim>::active_cell_iterator
-          cell = this->get_dof_handler().begin_active(),
-          endc = this->get_dof_handler().end();
-
-          for (; cell!=endc; ++cell)
+          for (const auto &cell : this->get_dof_handler().active_cell_iterators())
             if (cell->is_locally_owned())
               {
                 typename ParticleHandler<dim>::particle_iterator_range
@@ -647,11 +644,7 @@ namespace aspect
           TimerOutput::Scope timer_section(this->get_computing_timer(), "Particles: Update properties");
 
           // Loop over all cells and update the particles cell-wise
-          typename DoFHandler<dim>::active_cell_iterator
-          cell = this->get_dof_handler().begin_active(),
-          endc = this->get_dof_handler().end();
-
-          for (; cell!=endc; ++cell)
+          for (const auto &cell : this->get_dof_handler().active_cell_iterators())
             if (cell->is_locally_owned())
               {
                 typename ParticleHandler<dim>::particle_iterator_range
@@ -675,11 +668,7 @@ namespace aspect
         TimerOutput::Scope timer_section(this->get_computing_timer(), "Particles: Advect");
 
         // Loop over all cells and advect the particles cell-wise
-        typename DoFHandler<dim>::active_cell_iterator
-        cell = this->get_dof_handler().begin_active(),
-        endc = this->get_dof_handler().end();
-
-        for (; cell!=endc; ++cell)
+        for (const auto &cell : this->get_dof_handler().active_cell_iterators())
           if (cell->is_locally_owned())
             {
               const typename ParticleHandler<dim>::particle_iterator_range
@@ -837,8 +826,8 @@ namespace aspect
                              "diameter in one time step and therefore skip the layer "
                              "of ghost cells around the local subdomain."));
 
-      AssertThrow(!this->get_parameters().free_surface_enabled,
-                  ExcMessage("Combining particles and a free surface is currently untested "
+      AssertThrow(!this->get_parameters().mesh_deformation_enabled,
+                  ExcMessage("Combining particles and a deforming mesh is currently untested "
                              "and not officially supported. If you disable this assertion make "
                              "sure you benchmark the particle accuracy, and carefully check for "
                              "problems related to storing the particle reference coordinates for "

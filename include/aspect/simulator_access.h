@@ -25,6 +25,7 @@
 #include <aspect/global.h>
 #include <aspect/parameters.h>
 #include <aspect/introspection.h>
+#include <aspect/particle/world.h>
 
 #include <deal.II/base/table_handler.h>
 #include <deal.II/base/timer.h>
@@ -49,18 +50,6 @@ namespace aspect
 {
   using namespace dealii;
 
-#if DEAL_II_VERSION_GTE(9,1,0)
-  /**
-   * The ConstraintMatrix class was deprecated in deal.II 9.1 in favor
-   * of AffineConstraints. To make the name available for ASPECT
-   * nonetheless, use a `using` declaration. This injects the name
-   * into the `aspect` namespace, where it is visible before the
-   * deprecated name in the `dealii` namespace, thereby suppressing
-   * the deprecation message.
-   */
-  using ConstraintMatrix = class dealii::AffineConstraints<double>;
-#endif
-
   // forward declarations:
   template <int dim> class Simulator;
   template <int dim> struct SimulatorSignals;
@@ -74,6 +63,11 @@ namespace aspect
   namespace HeatingModel
   {
     template <int dim> class Manager;
+  }
+
+  namespace MaterialModel
+  {
+    template <int dim> class Interface;
   }
 
   namespace InitialTemperature
@@ -138,9 +132,19 @@ namespace aspect
 
   template <int dim> class MeltHandler;
   template <int dim> class VolumeOfFluidHandler;
-  template <int dim> class FreeSurfaceHandler;
+
+  namespace MeshDeformation
+  {
+    template <int dim> class MeshDeformationHandler;
+  }
 
   template <int dim> class NewtonHandler;
+
+
+  namespace Particle
+  {
+    template <int dim> class World;
+  }
 
   /**
    * SimulatorAccess is a base class for different plugins like postprocessors.
@@ -475,7 +479,7 @@ namespace aspect
 
       /**
        * Return a reference to the vector that has the mesh velocity for
-       * simulations with a free surface.
+       * simulations with mesh deformation.
        *
        * @note In general the vector is a distributed vector; however, it
        * contains ghost elements for all locally relevant degrees of freedom.
@@ -692,10 +696,12 @@ namespace aspect
 
       /**
        * Return a set of boundary indicators that describes which of the
-       * boundaries have a free surface boundary condition
+       * boundaries have a mesh deformation boundary condition. Note that
+       * it does not specify which boundaries have which mesh deformation
+       * condition, only which boundaries have a mesh deformation condition.
        */
       const std::set<types::boundary_id> &
-      get_free_surface_boundary_indicators () const;
+      get_mesh_deformation_boundary_indicators () const;
 
       /**
        * Return an reference to the manager of the boundary velocity models.
@@ -741,7 +747,7 @@ namespace aspect
        */
       const NewtonHandler<dim> &
       get_newton_handler () const;
-
+#ifdef ASPECT_WITH_WORLD_BUILDER
       /**
        * Return a reference to the world builder that controls the setup of
        * initial conditions.
@@ -751,13 +757,13 @@ namespace aspect
        */
       const WorldBuilder::World &
       get_world_builder () const;
-
+#endif
       /**
-       * Return a reference to the free surface handler. This function will
-       * throw an exception if no free surface is activated.
+       * Return a reference to the mesh deformation handler. This function will
+       * throw an exception if mesh deformation is not activated.
        */
-      const FreeSurfaceHandler<dim> &
-      get_free_surface_handler () const;
+      const MeshDeformation::MeshDeformationHandler<dim> &
+      get_mesh_deformation_handler () const;
 
       /**
        * Return a reference to the lateral averaging object owned
@@ -772,13 +778,41 @@ namespace aspect
        * constraints for the time step we are currently solving.
        */
       const ConstraintMatrix &
-      get_current_constraints() const;
+      get_current_constraints () const;
 
       /**
-       * Return whether or not the current object has been initialized by providing it with
-       * a pointer to a Simulator class object.
+       * Return whether the Simulator object has been completely initialized
+       * and has started to run its time stepping loop.
+       *
+       * This function is useful to determine in a plugin whether some
+       * of the information one can query about the Simulator can be trusted
+       * because it has already been set up completely. For example,
+       * while the Simulator is being
+       * set up, plugins may already have access to it via the current
+       * SimulatorAccess object, but data such as the current time, the
+       * time step number, etc, may all still be in a state that is not
+       * reliable since it may not have been initialized at that time. (As
+       * an example, at the very beginning of the Simulator object's existence,
+       * the time step number is set to numbers::invalid_unsigned_int, and
+       * only when the time step loop is started is it set to a valid
+       * value). Similar examples are that at some point the Simulator
+       * sets the solution vector to the correct size, but only at a later
+       * time (though before the time stepping starts), the *contents* of
+       * the solution vector are set based on the initial conditions
+       * specified in the input file.
+       *
+       * Only when this function returns @p true is all of the information
+       * returned by the SimulatorAccess object reliable and correct.
+       *
+       * @note This function returns @p true starting with the moment where the
+       *   Simulator starts the time stepping loop. However, it may
+       *   temporarily revert to returning @p false if, for example,
+       *   the Simulator does the initial mesh refinement steps where
+       *   it starts the time loop, but then goes back to
+       *   initialization steps (mesh refinement, interpolation of initial
+       *   conditions, etc.) before re-starting the time loop.
        */
-      bool simulator_is_initialized () const;
+      bool simulator_is_past_initialization () const;
 
       /**
        * Return the value used for rescaling the pressure in the linear
@@ -850,6 +884,22 @@ namespace aspect
        */
       const Postprocess::Manager<dim> &
       get_postprocess_manager () const;
+
+      /**
+       * Returns a const reference to the particle world, in case anyone
+       * wants to query something about particles.
+       */
+      const Particle::World<dim> &
+      get_particle_world() const;
+
+      /**
+       * Returns a reference to the particle world, in case anyone wants to
+       * change something within the particle world. Use with care, usually
+       * you want to only let the functions within the particle subsystem
+       * change member variables of the particle world.
+       */
+      Particle::World<dim> &
+      get_particle_world();
 
       /** @} */
 

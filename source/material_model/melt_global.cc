@@ -240,7 +240,7 @@ namespace aspect
               const double delta_temp = in.temperature[i]-this->get_adiabatic_conditions().temperature(in.position[i]);
               visc_temperature_dependence = std::max(std::min(std::exp(-thermal_viscosity_exponent*delta_temp/this->get_adiabatic_conditions().temperature(in.position[i])),1e4),1e-4);
             }
-          else
+          else if (thermal_viscosity_exponent != 0.0)
             {
               const double delta_temp = in.temperature[i]-reference_T;
               visc_temperature_dependence = std::max(std::min(std::exp(-thermal_viscosity_exponent*delta_temp/reference_T),1e4),1e-4);
@@ -281,7 +281,7 @@ namespace aspect
                   const double delta_temp = in.temperature[i]-this->get_adiabatic_conditions().temperature(in.position[i]);
                   visc_temperature_dependence = std::max(std::min(std::exp(-thermal_bulk_viscosity_exponent*delta_temp/this->get_adiabatic_conditions().temperature(in.position[i])),1e4),1e-4);
                 }
-              else
+              else if (thermal_viscosity_exponent != 0.0)
                 {
                   const double delta_temp = in.temperature[i]-reference_T;
                   visc_temperature_dependence = std::max(std::min(std::exp(-thermal_bulk_viscosity_exponent*delta_temp/reference_T),1e4),1e-4);
@@ -310,7 +310,7 @@ namespace aspect
           prm.declare_entry ("Reference temperature", "293",
                              Patterns::Double (0),
                              "The reference temperature $T_0$. The reference temperature is used "
-                             "in both the density and viscosity formulas. Units: $K$.");
+                             "in both the density and viscosity formulas. Units: $\\si{K}$.");
           prm.declare_entry ("Reference shear viscosity", "5e20",
                              Patterns::Double (0),
                              "The value of the constant viscosity $\\eta_0$ of the solid matrix. "
@@ -366,7 +366,7 @@ namespace aspect
           prm.declare_entry ("Surface solidus", "1300",
                              Patterns::Double (0),
                              "Solidus for a pressure of zero. "
-                             "Units: $K$.");
+                             "Units: $\\si{K}$.");
           prm.declare_entry ("Depletion solidus change", "200.0",
                              Patterns::Double (),
                              "The solidus temperature change for a depletion of 100\\%. For positive "
@@ -374,7 +374,7 @@ namespace aspect
                              "(depletion) and lowered for a negative peridotite field (enrichment). "
                              "Scaling with depletion is linear. Only active when fractional melting "
                              "is used. "
-                             "Units: $K$.");
+                             "Units: $\\si{K}$.");
           prm.declare_entry ("Pressure solidus change", "6e-8",
                              Patterns::Double (),
                              "The linear solidus temperature change with pressure. For positive "

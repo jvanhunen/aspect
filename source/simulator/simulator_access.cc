@@ -20,7 +20,8 @@
 
 
 #include <aspect/simulator.h>
-#include <aspect/free_surface.h>
+#include <aspect/mesh_deformation/free_surface.h>
+#include <aspect/mesh_deformation/interface.h>
 
 namespace aspect
 {
@@ -310,9 +311,9 @@ namespace aspect
   const LinearAlgebra::BlockVector &
   SimulatorAccess<dim>::get_mesh_velocity () const
   {
-    Assert( simulator->parameters.free_surface_enabled,
-            ExcMessage("You cannot get the mesh velocity with no free surface."));
-    return simulator->free_surface->mesh_velocity;
+    Assert( simulator->parameters.mesh_deformation_enabled,
+            ExcMessage("You cannot get the mesh velocity if mesh deformation is not enabled."));
+    return simulator->mesh_deformation->mesh_velocity;
   }
 
 
@@ -484,9 +485,11 @@ namespace aspect
 
   template <int dim>
   const std::set<types::boundary_id> &
-  SimulatorAccess<dim>::get_free_surface_boundary_indicators () const
+  SimulatorAccess<dim>::get_mesh_deformation_boundary_indicators () const
   {
-    return simulator->parameters.free_surface_boundary_indicators;
+    Assert( simulator->parameters.mesh_deformation_enabled,
+            ExcMessage("You cannot get the mesh deformation boundary indicators if mesh deformation is not enabled."));
+    return simulator->mesh_deformation->get_active_mesh_deformation_boundary_indicators();
   }
 
 
@@ -616,34 +619,27 @@ namespace aspect
   }
 
 
-
+#ifdef ASPECT_WITH_WORLD_BUILDER
   template <int dim>
   const WorldBuilder::World &
   SimulatorAccess<dim>::get_world_builder () const
   {
-#ifdef ASPECT_USE_WORLD_BUILDER
     Assert (simulator->world_builder.get() != nullptr,
             ExcMessage("You can not call this function if the World Builder is not enabled. "
                        "Enable it by providing a path to a world builder file."));
-#else
-    AssertThrow (false,
-                 ExcMessage ("Configuration of ASPECT did not find a copy of the "
-                             "WorldBuilder library. Consequently, accessing it "
-                             "can not work at runtime."));
-#endif
     return *(simulator->world_builder);
   }
-
+#endif
 
 
   template <int dim>
-  const FreeSurfaceHandler<dim> &
-  SimulatorAccess<dim>::get_free_surface_handler () const
+  const MeshDeformation::MeshDeformationHandler<dim> &
+  SimulatorAccess<dim>::get_mesh_deformation_handler () const
   {
-    Assert (simulator->free_surface.get() != nullptr,
-            ExcMessage("You can not call this function if the free surface is not enabled."));
+    Assert (simulator->mesh_deformation.get() != nullptr,
+            ExcMessage("You cannot call this function if mesh deformation is not enabled."));
 
-    return *(simulator->free_surface);
+    return *(simulator->mesh_deformation);
   }
 
   template <int dim>
@@ -678,12 +674,17 @@ namespace aspect
     return simulator->current_constraints;
   }
 
+
+
   template <int dim>
   bool
-  SimulatorAccess<dim>::simulator_is_initialized () const
+  SimulatorAccess<dim>::simulator_is_past_initialization () const
   {
-    return (simulator != nullptr);
+    return ((simulator != nullptr)
+            &&
+            (simulator->simulator_is_past_initialization == true));
   }
+
 
   template <int dim>
   double
@@ -711,6 +712,25 @@ namespace aspect
   SimulatorAccess<dim>::get_postprocess_manager() const
   {
     return simulator->postprocess_manager;
+  }
+
+
+  template <int dim>
+  const Particle::World<dim> &
+  SimulatorAccess<dim>::get_particle_world() const
+  {
+    Assert (simulator->particle_world.get() != nullptr,
+            ExcMessage("You can not call this function if there is no particle world."));
+    return *simulator->particle_world.get();
+  }
+
+  template <int dim>
+  Particle::World<dim> &
+  SimulatorAccess<dim>::get_particle_world()
+  {
+    Assert (simulator->particle_world.get() != nullptr,
+            ExcMessage("You can not call this function if there is no particle world."));
+    return *simulator->particle_world.get();
   }
 }
 

@@ -21,7 +21,7 @@
 
 #include <aspect/simulator.h>
 #include <aspect/utilities.h>
-#include <aspect/free_surface.h>
+#include <aspect/mesh_deformation/interface.h>
 #include <aspect/melt.h>
 
 #include <deal.II/base/mpi.h>
@@ -95,7 +95,7 @@ namespace aspect
       oa << parameters.n_compositional_fields;
       oa << parameters.names_of_compositional_fields;
       oa << parameters.normalized_fields;
-      oa << parameters.free_surface_enabled;
+      oa << parameters.mesh_deformation_enabled;
     }
 
 
@@ -245,10 +245,10 @@ namespace aspect
                                "These need to be the same during restarting "
                                "from a checkpoint."));
 
-      bool free_surface_enabled;
-      ia >> free_surface_enabled;
-      AssertThrow (free_surface_enabled == parameters.free_surface_enabled,
-                   ExcMessage ("The enable free surface setting that were stored "
+      bool mesh_deformation_enabled;
+      ia >> mesh_deformation_enabled;
+      AssertThrow (mesh_deformation_enabled == parameters.mesh_deformation_enabled,
+                   ExcMessage ("The enable mesh deformation settings that were stored "
                                "in the checkpoint file is not the same as the one "
                                "you currently set in your input file. "
                                "These need to be the same during restarting "
@@ -262,29 +262,7 @@ namespace aspect
   void Simulator<dim>::create_snapshot()
   {
     TimerOutput::Scope timer (computing_timer, "Create snapshot");
-    unsigned int my_id = Utilities::MPI::this_mpi_process (mpi_communicator);
-
-    if (my_id == 0)
-      {
-        // if we have previously written a snapshot, then keep the last
-        // snapshot in case this one fails to save. Note: static variables
-        // will only be initialized once per model run.
-        static bool previous_snapshot_exists = (parameters.resume_computation == true);
-
-        if (previous_snapshot_exists == true)
-          {
-            move_file (parameters.output_directory + "restart.mesh",
-                       parameters.output_directory + "restart.mesh.old");
-            move_file (parameters.output_directory + "restart.mesh.info",
-                       parameters.output_directory + "restart.mesh.info.old");
-            move_file (parameters.output_directory + "restart.resume.z",
-                       parameters.output_directory + "restart.resume.z.old");
-          }
-        // from now on, we know that if we get into this
-        // function again that a snapshot has previously
-        // been written
-        previous_snapshot_exists = true;
-      }
+    const unsigned int my_id = Utilities::MPI::this_mpi_process (mpi_communicator);
 
     // save Triangulation and Solution vectors:
     {
@@ -293,9 +271,9 @@ namespace aspect
       x_system[1] = &old_solution;
       x_system[2] = &old_old_solution;
 
-      // If we are using a free surface, include the mesh velocity, which uses the system dof handler
-      if (parameters.free_surface_enabled)
-        x_system.push_back( &free_surface->mesh_velocity );
+      // If we are using a deforming mesh, include the mesh velocity, which uses the system dof handler
+      if (parameters.mesh_deformation_enabled)
+        x_system.push_back( &mesh_deformation->mesh_velocity );
 
       parallel::distributed::SolutionTransfer<dim, LinearAlgebra::BlockVector>
       system_trans (dof_handler);
@@ -306,28 +284,28 @@ namespace aspect
       system_trans.prepare_serialization (x_system);
 #endif
 
-      // If we are using a free surface, also serialize the mesh vertices vector, which
+      // If we are deforming the mesh, also serialize the mesh vertices vector, which
       // uses its own dof handler
       std::vector<const LinearAlgebra::Vector *> x_fs_system (1);
-      std::unique_ptr<parallel::distributed::SolutionTransfer<dim,LinearAlgebra::Vector> > freesurface_trans;
-      if (parameters.free_surface_enabled)
+      std::unique_ptr<parallel::distributed::SolutionTransfer<dim,LinearAlgebra::Vector> > mesh_deformation_trans;
+      if (parameters.mesh_deformation_enabled)
         {
-          freesurface_trans
+          mesh_deformation_trans
             = std_cxx14::make_unique<parallel::distributed::SolutionTransfer<dim,LinearAlgebra::Vector>>
-              (free_surface->free_surface_dof_handler);
+              (mesh_deformation->mesh_deformation_dof_handler);
 
-          x_fs_system[0] = &free_surface->mesh_displacements;
+          x_fs_system[0] = &mesh_deformation->mesh_displacements;
 
 #if DEAL_II_VERSION_GTE(9,1,0)
-          freesurface_trans->prepare_for_serialization(x_fs_system);
+          mesh_deformation_trans->prepare_for_serialization(x_fs_system);
 #else
-          freesurface_trans->prepare_serialization(x_fs_system);
+          mesh_deformation_trans->prepare_serialization(x_fs_system);
 #endif
         }
 
       signals.pre_checkpoint_store_user_data(triangulation);
 
-      triangulation.save ((parameters.output_directory + "restart.mesh").c_str());
+      triangulation.save ((parameters.output_directory + "restart.mesh.new").c_str());
     }
 
     // save general information This calls the serialization functions on all
@@ -363,7 +341,7 @@ namespace aspect
                 (uint32_t)compressed_data_length
               }; /* list of compressed sizes of blocks */
 
-          std::ofstream f ((parameters.output_directory + "restart.resume.z").c_str());
+          std::ofstream f ((parameters.output_directory + "restart.resume.z.new").c_str());
           f.write((const char *)compression_header, 4 * sizeof(compression_header[0]));
           f.write((char *)&compressed_data[0], compressed_data_length);
           f.close();
@@ -375,7 +353,7 @@ namespace aspect
           // "sticky".
           if (!f)
             AssertThrow(false, ExcMessage ("Writing of the checkpoint file '" + parameters.output_directory
-                                           + "restart.resume.z' with size "
+                                           + "restart.resume.z.new' with size "
                                            + Utilities::to_string(4 * sizeof(compression_header[0])+compressed_data_length)
                                            + " failed on processor 0."));
         }
@@ -387,6 +365,52 @@ namespace aspect
 #endif
 
     }
+
+    // Wait for everyone to finish writing
+    MPI_Barrier(mpi_communicator);
+
+    // Now rename the snapshots to put the new one in place of the old one.
+    // Do this after writing the new one, because writing large checkpoints
+    // can be slow, and the model might be cancelled during writing.
+    // This way restart remains usable even if restart.new is not completely
+    // written.
+    if (my_id == 0)
+      {
+        // if we have previously written a snapshot, then keep the last
+        // snapshot in case this one fails to save. Note: static variables
+        // will only be initialized once per model run.
+        static bool previous_snapshot_exists = (parameters.resume_computation == true);
+
+        if (previous_snapshot_exists == true)
+          {
+            move_file (parameters.output_directory + "restart.mesh",
+                       parameters.output_directory + "restart.mesh.old");
+            move_file (parameters.output_directory + "restart.mesh.info",
+                       parameters.output_directory + "restart.mesh.info.old");
+            move_file (parameters.output_directory + "restart.resume.z",
+                       parameters.output_directory + "restart.resume.z.old");
+#if DEAL_II_VERSION_GTE(9,1,0)
+            move_file (parameters.output_directory + "restart.mesh_fixed.data",
+                       parameters.output_directory + "restart.mesh_fixed.data.old");
+#endif
+          }
+
+        move_file (parameters.output_directory + "restart.mesh.new",
+                   parameters.output_directory + "restart.mesh");
+        move_file (parameters.output_directory + "restart.mesh.new.info",
+                   parameters.output_directory + "restart.mesh.info");
+        move_file (parameters.output_directory + "restart.resume.z.new",
+                   parameters.output_directory + "restart.resume.z");
+#if DEAL_II_VERSION_GTE(9,1,0)
+        move_file (parameters.output_directory + "restart.mesh.new_fixed.data",
+                   parameters.output_directory + "restart.mesh_fixed.data");
+#endif
+
+        // from now on, we know that if we get into this
+        // function again that a snapshot has previously
+        // been written
+        previous_snapshot_exists = true;
+      }
 
     pcout << "*** Snapshot created!" << std::endl << std::endl;
   }
@@ -451,7 +475,7 @@ namespace aspect
 
     // If necessary, also include the mesh velocity for deserialization
     // with the system dof handler
-    if (parameters.free_surface_enabled)
+    if (parameters.mesh_deformation_enabled)
       x_system.push_back(&distributed_mesh_velocity);
 
     parallel::distributed::SolutionTransfer<dim, LinearAlgebra::BlockVector>
@@ -463,20 +487,20 @@ namespace aspect
     old_solution = old_distributed_system;
     old_old_solution = old_old_distributed_system;
 
-    if (parameters.free_surface_enabled)
+    if (parameters.mesh_deformation_enabled)
       {
         // copy the mesh velocity which uses the system dof handler
-        free_surface->mesh_velocity = distributed_mesh_velocity;
+        mesh_deformation->mesh_velocity = distributed_mesh_velocity;
 
-        // deserialize and copy the vectors using the free surface dof handler
-        parallel::distributed::SolutionTransfer<dim, LinearAlgebra::Vector> freesurface_trans( free_surface->free_surface_dof_handler );
-        LinearAlgebra::Vector distributed_mesh_displacements( free_surface->mesh_locally_owned,
+        // deserialize and copy the vectors using the mesh deformation dof handler
+        parallel::distributed::SolutionTransfer<dim, LinearAlgebra::Vector> mesh_deformation_trans( mesh_deformation->mesh_deformation_dof_handler );
+        LinearAlgebra::Vector distributed_mesh_displacements( mesh_deformation->mesh_locally_owned,
                                                               mpi_communicator );
         std::vector<LinearAlgebra::Vector *> fs_system(1);
         fs_system[0] = &distributed_mesh_displacements;
 
-        freesurface_trans.deserialize (fs_system);
-        free_surface->mesh_displacements = distributed_mesh_displacements;
+        mesh_deformation_trans.deserialize (fs_system);
+        mesh_deformation->mesh_displacements = distributed_mesh_displacements;
       }
 
     // read zlib compressed resume.z

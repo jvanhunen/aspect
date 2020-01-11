@@ -44,13 +44,10 @@ namespace aspect
     Topography<dim>::execute (TableHandler &statistics)
     {
       //Disallow use of the plugin with sphere geometry model
-      if (GeometryModel::Sphere<dim> *gm = dynamic_cast<GeometryModel::Sphere<dim> *>
-                                           (const_cast<GeometryModel::Interface<dim> *>(&this->get_geometry_model())))
-        {
-          AssertThrow(false, ExcMessage("Topography postprocessor is not yet implemented "
-                                        "for the sphere geometry model. "
-                                        "Consider using a box, spherical shell, or chunk.") );
-        }
+      AssertThrow(!Plugins::plugin_type_matches<const GeometryModel::Sphere<dim>>(this->get_geometry_model()),
+                  ExcMessage("Topography postprocessor is not yet implemented "
+                             "for the sphere geometry model. "
+                             "Consider using a box, spherical shell, or chunk.") );
 
       const types::boundary_id relevant_boundary = this->get_geometry_model().translate_symbolic_boundary_name_to_id ("top");
 
@@ -68,10 +65,7 @@ namespace aspect
       double local_min_height = std::numeric_limits<double>::max();
 
       // loop over all of the surface cells and save the elevation to stored_value
-      typename parallel::distributed::Triangulation<dim>::active_cell_iterator cell = this->get_triangulation().begin_active(),
-                                                                               endc = this->get_triangulation().end();
-
-      for (; cell != endc; ++cell)
+      for (const auto &cell : this->get_dof_handler().active_cell_iterators())
         if (cell->is_locally_owned() && cell->at_boundary())
           for (unsigned int face_no = 0; face_no < GeometryInfo<dim>::faces_per_cell; ++face_no)
             if (cell->face(face_no)->at_boundary())
@@ -266,7 +260,7 @@ namespace aspect
   {
     ASPECT_REGISTER_POSTPROCESSOR(Topography,
                                   "topography",
-                                  "A postprocessor intended for use with a free surface.  After every step "
+                                  "A postprocessor intended for use with a deforming top surface.  After every step "
                                   "it loops over all the vertices on the top surface and determines the "
                                   "maximum and minimum topography relative to a reference datum (initial "
                                   "box height for a box geometry model or initial radius for a "

@@ -18,16 +18,24 @@
   <http://www.gnu.org/licenses/>.
 */
 
-#ifdef ASPECT_USE_WORLD_BUILDER
+#ifdef ASPECT_WITH_WORLD_BUILDER
 #include <aspect/initial_composition/world_builder.h>
 #include <aspect/geometry_model/interface.h>
 #include <world_builder/world.h>
+#include <aspect/citation_info.h>
 
 
 namespace aspect
 {
   namespace InitialComposition
   {
+    template <int dim>
+    void
+    WorldBuilder<dim>::
+    initialize()
+    {
+      CitationInfo::add("GWB");
+    }
 
     template <int dim>
     double

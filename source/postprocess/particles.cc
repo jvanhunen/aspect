@@ -38,16 +38,30 @@ namespace aspect
       void
       ParticleOutput<dim>::build_patches(const dealii::Particles::ParticleHandler<dim> &particle_handler,
                                          const aspect::Particle::Property::ParticlePropertyInformation &property_information,
+                                         const std::vector<std::string> &exclude_output_properties,
                                          const bool only_group_3d_vectors)
       {
-        // First store the names of the data fields
+        // First store the names of the data fields that should be written
         dataset_names.reserve(property_information.n_components()+1);
         dataset_names.push_back("id");
 
+        // This is a map from an index for the particle property vector to an index in the output
+        // vector. Values equal 0 indicate a property will not be written, values bigger 0
+        // indicate into which output entry the property value should be written.
+        std::vector<unsigned int> property_index_to_output_index(property_information.n_components(),0);
+
+        // Start the output index from 1, because 0 is occupied by the "id"
+        unsigned int output_index = 1;
         for (unsigned int field_index = 0; field_index < property_information.n_fields(); ++field_index)
           {
+            // Determine some info about the field.
             const unsigned n_components = property_information.get_components_by_field_index(field_index);
             const std::string field_name = property_information.get_field_name_by_index(field_index);
+            const unsigned int field_position = property_information.n_fields() == 0
+                                                ?
+                                                0
+                                                :
+                                                property_information.get_position_by_field_index(field_index);
 
             // HDF5 only supports 3D vector output, therefore only treat output fields as vector if we
             // have a dimension of 3 and 3 components.
@@ -57,37 +71,49 @@ namespace aspect
                                          :
                                          dim == 3 && n_components == 3;
 
-            // If it is a 1D element, or a vector, print just the name, otherwise append the index after an underscore
-            if ((n_components == 1) || field_is_vector)
-              for (unsigned int component_index=0; component_index<n_components; ++component_index)
-                dataset_names.push_back(field_name);
-            else
-              for (unsigned int component_index=0; component_index<n_components; ++component_index)
-                dataset_names.push_back(field_name + "_" + Utilities::to_string(component_index));
-          }
+            // Determine if this field should be excluded, if so, skip it
+            bool found = false;
+            for (unsigned int i = 0; i < exclude_output_properties.size(); ++i)
+              if (exclude_output_properties[i] == "all" || field_name.find(exclude_output_properties[i]) != std::string::npos)
+                {
+                  found = true;
+                  break;
+                }
 
+            if (found == true)
+              continue;
 
-        // Second store which of these data fields are vectors
+            // For each component record its name and position in output vector
+            for (unsigned int component_index=0; component_index<n_components; ++component_index)
+              {
+                // If it is a 1D element, or a vector, print just the name, otherwise append the index after an underscore
+                if ((n_components == 1) || field_is_vector)
+                  dataset_names.push_back(field_name);
+                else
+                  dataset_names.push_back(field_name + "_" + Utilities::to_string(component_index));
 
-        for (unsigned int field_index = 0; field_index < property_information.n_fields(); ++field_index)
-          {
-            const unsigned n_components = property_information.get_components_by_field_index(field_index);
+                property_index_to_output_index[field_position + component_index] = output_index;
+                ++output_index;
+              }
 
             // If the property has dim components, we treat it as vector
             if (n_components == dim)
               {
-                const unsigned int field_position = property_information.get_position_by_field_index(field_index);
-                const std::string field_name = property_information.get_field_name_by_index(field_index);
-                vector_datasets.push_back(std::make_tuple(field_position+1,
-                                                          field_position+n_components,
+#if DEAL_II_VERSION_GTE(9,1,0)
+                vector_datasets.push_back(std::make_tuple(property_index_to_output_index[field_position],
+                                                          property_index_to_output_index[field_position]+n_components-1,
+                                                          field_name,
+                                                          DataComponentInterpretation::component_is_part_of_vector));
+#else
+                vector_datasets.push_back(std::make_tuple(property_index_to_output_index[field_position],
+                                                          property_index_to_output_index[field_position]+n_components-1,
                                                           field_name));
+#endif
               }
           }
 
-
-        // Third build the actual patch data
+        // Now build the actual patch data
         patches.resize(particle_handler.n_locally_owned_particles());
-
         typename dealii::Particles::ParticleHandler<dim>::particle_iterator particle = particle_handler.begin();
 
         for (unsigned int i=0; particle != particle_handler.end(); ++particle, ++i)
@@ -95,15 +121,19 @@ namespace aspect
             patches[i].vertices[0] = particle->get_location();
             patches[i].patch_index = i;
             patches[i].n_subdivisions = 1;
-            patches[i].data.reinit(property_information.n_components()+1,1);
+            patches[i].data.reinit(dataset_names.size(),1);
 
             patches[i].data(0,0) = particle->get_id();
 
             if (particle->has_properties())
               {
                 const ArrayView<const double> properties = particle->get_properties();
+
                 for (unsigned int property_index = 0; property_index < properties.size(); ++property_index)
-                  patches[i].data(property_index+1,0) = properties[property_index];
+                  {
+                    if (property_index_to_output_index[property_index] > 0)
+                      patches[i].data(property_index_to_output_index[property_index],0) = properties[property_index];
+                  }
               }
           }
       }
@@ -122,12 +152,24 @@ namespace aspect
         return dataset_names;
       }
 
+#if DEAL_II_VERSION_GTE(9,1,0)
+      template <int dim>
+      std::vector<
+      std::tuple<unsigned int,
+          unsigned int, std::string,
+          DataComponentInterpretation::DataComponentInterpretation> >
+          ParticleOutput<dim>::get_nonscalar_data_ranges () const
+      {
+        return vector_datasets;
+      }
+#else
       template <int dim>
       std::vector<std::tuple<unsigned int, unsigned int, std::string> >
       ParticleOutput<dim>::get_vector_data_ranges () const
       {
         return vector_datasets;
       }
+#endif
 
     }
 
@@ -150,34 +192,6 @@ namespace aspect
       // make sure a thread that may still be running in the background,
       // writing data, finishes
       background_thread.join ();
-    }
-
-    template <int dim>
-    void
-    Particles<dim>::generate_particles()
-    {
-      world.generate_particles();
-    }
-
-    template <int dim>
-    void
-    Particles<dim>::initialize_particles()
-    {
-      world.initialize_particles();
-    }
-
-    template <int dim>
-    const Particle::World<dim> &
-    Particles<dim>::get_particle_world() const
-    {
-      return world;
-    }
-
-    template <int dim>
-    Particle::World<dim> &
-    Particles<dim>::get_particle_world()
-    {
-      return world;
     }
 
     template <int dim>
@@ -321,12 +335,7 @@ namespace aspect
       if (std::isnan(last_output_time))
         last_output_time = this->get_time() - output_interval;
 
-      // Do not advect the particles in the initial refinement stage
-      const bool in_initial_refinement = (this->get_timestep_number() == 0)
-                                         && (this->get_pre_refinement_step() < this->get_parameters().initial_adaptive_refinement);
-      if (!in_initial_refinement)
-        // Advance the particles in the world to the current time
-        world.advance_timestep();
+      const Particle::World<dim> &world = this->get_particle_world();
 
       statistics.add_value("Number of advected particles",world.n_global_particles());
 
@@ -335,10 +344,6 @@ namespace aspect
       if (this->get_time() < last_output_time + output_interval)
         return std::make_pair("Number of advected particles:",
                               Utilities::int_to_string(world.n_global_particles()));
-
-
-      if (world.get_property_manager().need_update() == Particle::Property::update_output_step)
-        world.update_particles();
 
       if (output_file_number == numbers::invalid_unsigned_int)
         output_file_number = 0;
@@ -350,6 +355,7 @@ namespace aspect
       internal::ParticleOutput<dim> data_out;
       data_out.build_patches(world.get_particle_handler(),
                              world.get_property_manager().get_data_info(),
+                             exclude_output_properties,
                              output_hdf5);
 
       // Now prepare everything for writing the output and choose output format
@@ -555,7 +561,7 @@ namespace aspect
       std::ostringstream os;
       aspect::oarchive oa (os);
 
-      world.save(os);
+      this->get_particle_world().save(os);
       oa << (*this);
 
       status_strings["Particles"] = os.str();
@@ -573,7 +579,7 @@ namespace aspect
           aspect::iarchive ia (is);
 
           // Load the particle world
-          world.load(is);
+          this->get_particle_world().load(is);
 
           ia >> (*this);
         }
@@ -632,6 +638,12 @@ namespace aspect
                              "move this file to a network file system. If this variable is "
                              "set to a non-empty string it will be interpreted as a "
                              "temporary storage location.");
+
+          prm.declare_entry ("Exclude output properties", "",
+                             Patterns::Anything(),
+                             "A comma seperated list of strings which exclude all particle"
+                             "property fields which contain these strings. If one of the "
+                             "entries is 'all', only a id will be provided for every point.");
         }
         prm.leave_subsection ();
       }
@@ -702,16 +714,12 @@ namespace aspect
                                      "there is a terminal available to move the files to their final location "
                                      "after writing. The system() command did not succeed in finding such a terminal."));
             }
+
+          exclude_output_properties = Utilities::split_string_list(prm.get("Exclude output properties"));
         }
         prm.leave_subsection ();
       }
       prm.leave_subsection ();
-
-      // Initialize the particle world
-      if (SimulatorAccess<dim> *sim = dynamic_cast<SimulatorAccess<dim>*>(&world))
-        sim->initialize_simulator (this->get_simulator());
-      world.parse_parameters(prm);
-      world.initialize();
     }
   }
 }

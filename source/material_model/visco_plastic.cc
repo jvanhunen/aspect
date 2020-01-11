@@ -43,6 +43,30 @@ namespace aspect
     }
 
     template <int dim>
+    bool
+    ViscoPlastic<dim>::
+    is_yielding (const double &pressure,
+                 const double &temperature,
+                 const std::vector<double> &composition,
+                 const SymmetricTensor<2,dim> &strain_rate) const
+    {
+      /* The following returns whether or not the material is plastically yielding
+       * as documented in evaluate.
+       */
+      bool plastic_yielding = false;
+
+      const std::vector<double> volume_fractions = MaterialUtilities::compute_volume_fractions(composition, get_volumetric_composition_mask());
+
+      const std::pair<std::vector<double>, std::vector<bool> > calculate_viscosities =
+        calculate_isostrain_viscosities(volume_fractions, pressure, temperature, composition, strain_rate, viscous_flow_law, yield_mechanism);
+
+      std::vector<double>::const_iterator max_composition = std::max_element(volume_fractions.begin(),volume_fractions.end());
+      plastic_yielding = calculate_viscosities.second[std::distance(volume_fractions.begin(),max_composition)];
+
+      return plastic_yielding;
+    }
+
+    template <int dim>
     PlasticAdditionalOutputs<dim>::PlasticAdditionalOutputs (const unsigned int n_points)
       :
       NamedAdditionalMaterialOutputs<dim>(make_plastic_additional_outputs_names()),
@@ -119,26 +143,14 @@ namespace aspect
       // Calculate viscosities for each of the individual compositional phases
       std::vector<double> composition_viscosities(volume_fractions.size());
       std::vector<bool> composition_yielding(volume_fractions.size());
+
       for (unsigned int j=0; j < volume_fractions.size(); ++j)
         {
-          // Power law creep equation
-          //    viscosity = 0.5 * A^(-1/n) * edot_ii^((1-n)/n) * d^(m/n) * exp((E + P*V)/(nRT))
-          // A: prefactor, edot_ii: square root of second invariant of deviatoric strain rate tensor,
-          // d: grain size, m: grain size exponent, E: activation energy, P: pressure,
-          // V; activation volume, n: stress exponent, R: gas constant, T: temperature.
-          // Note: values of A, d, m, E, V and n are distinct for diffusion & dislocation creep
+          // Compute viscosity from iffusion creep law
+          const double viscosity_diffusion = diffusion_creep.compute_viscosity(pressure, temperature_for_viscosity, j);
 
-          // Diffusion creep: viscosity is grain size dependent (m!=0) and strain-rate independent (n=1)
-          double viscosity_diffusion = 0.5 / prefactors_diffusion[j] *
-                                       std::exp((activation_energies_diffusion[j] + pressure*activation_volumes_diffusion[j])/
-                                                (constants::gas_constant*temperature_for_viscosity)) *
-                                       std::pow(grain_size, grain_size_exponents_diffusion[j]);
-
-          // For dislocation creep, viscosity is grain size independent (m=0) and strain-rate dependent (n>1)
-          double viscosity_dislocation = 0.5 * std::pow(prefactors_dislocation[j],-1/stress_exponents_dislocation[j]) *
-                                         std::exp((activation_energies_dislocation[j] + pressure*activation_volumes_dislocation[j])/
-                                                  (constants::gas_constant*temperature_for_viscosity*stress_exponents_dislocation[j])) *
-                                         std::pow(edot_ii,((1. - stress_exponents_dislocation[j])/stress_exponents_dislocation[j]));
+          // Compute visocisty from dislocation creep law
+          const double viscosity_dislocation = dislocation_creep.compute_viscosity(edot_ii, pressure, temperature_for_viscosity, j);
 
           // Select what form of viscosity to use (diffusion, dislocation or composite)
           double viscosity_pre_yield = 0.0;
@@ -169,25 +181,24 @@ namespace aspect
 
           // Second step: strain weakening
 
-          // Calculate the strain weakened cohesion, friction and viscosity factors
-          const std::array<double, 3> weakened_values = compute_weakened_yield_parameters(j, composition);
-          // Reduce the viscosity by the viscous strain weakening factor,
-          // which is 1 if no viscous strain-softening is specified.
-          viscosity_pre_yield *= weakened_values[2];
+          // Calculate the strain weakening factors for cohesion, friction and viscosity. If no brittle and/or viscous strain weakening is applied, the factors are 1.
+          const std::array<double, 3> weakening_factors = strain_rheology.compute_strain_weakening_factors(j, composition);
 
-          // Weakened friction and cohesion values
-          std::pair<double, double> yield_parameters (weakened_values[0], weakened_values[1]);
+          const double current_cohesion = drucker_prager_parameters.cohesions[j] * weakening_factors[0];
+          const double current_friction = drucker_prager_parameters.angles_internal_friction[j] * weakening_factors[1];
+          viscosity_pre_yield *= weakening_factors[2];
 
           // Third step: plastic yielding
 
-          // Calculate Drucker-Prager yield strength (i.e. yield stress)
-          const MaterialUtilities::DruckerPragerInputs plastic_in(yield_parameters.first, yield_parameters.second, std::max(pressure,0.0), edot_ii, max_yield_strength);
-          MaterialUtilities::DruckerPragerOutputs plastic_out;
-          MaterialUtilities::compute_drucker_prager_yielding<dim> (plastic_in, plastic_out);
+          // Calculate Drucker-Prager yield stress
+          const double yield_stress = drucker_prager_plasticity.compute_yield_stress(current_cohesion,
+                                                                                     current_friction,
+                                                                                     std::max(pressure,0.0),
+                                                                                     drucker_prager_parameters.max_yield_stress);
 
-          // If the viscous stress is greater than the yield strength, indicate we are in the yielding regime.
+          // If the viscous stress is greater than the yield stress, indicate we are in the yielding regime.
           const double viscous_stress = 2. * viscosity_pre_yield * edot_ii;
-          if (viscous_stress >= plastic_out.yield_strength)
+          if (viscous_stress >= yield_stress)
             composition_yielding[j] = true;
 
           // Select if yield viscosity is based on Drucker Prager or stress limiter rheology
@@ -196,16 +207,20 @@ namespace aspect
             {
               case stress_limiter:
               {
-                const double viscosity_limiter = plastic_out.yield_strength / (2.0 * ref_strain_rate)
+                const double viscosity_limiter = yield_stress / (2.0 * ref_strain_rate)
                                                  * std::pow((edot_ii/ref_strain_rate), 1./exponents_stress_limiter[j] - 1.0);
                 viscosity_yield = 1. / ( 1./viscosity_limiter + 1./viscosity_pre_yield);
                 break;
               }
               case drucker_prager:
               {
-                // If the viscous stress is greater than the yield strength, rescale the viscosity back to yield surface
-                if (viscous_stress >= plastic_out.yield_strength)
-                  viscosity_yield = plastic_out.plastic_viscosity;
+                // If the viscous stress is greater than the yield stress, rescale the viscosity back to yield surface
+                if (viscous_stress >= yield_stress)
+                  viscosity_yield = drucker_prager_plasticity.compute_viscosity(current_cohesion,
+                                                                                current_friction,
+                                                                                std::max(pressure,0.0),
+                                                                                edot_ii,
+                                                                                drucker_prager_parameters.max_yield_stress);
                 break;
               }
               default:
@@ -224,116 +239,6 @@ namespace aspect
 
 
     template <int dim>
-    std::array<double, 3>
-    ViscoPlastic<dim>::
-    compute_weakened_yield_parameters(const unsigned int j,
-                                      const std::vector<double> &composition) const
-    {
-      double viscous_weakening = 1.0;
-      std::pair<double, double> yield_parameters (cohesions[j], angles_internal_friction[j]);
-
-      switch (weakening_mechanism)
-        {
-          case none:
-          {
-            break;
-          }
-          case finite_strain_tensor:
-          {
-            // Calculate second invariant of left stretching tensor "L"
-            Tensor<2,dim> strain;
-            for (unsigned int q = 0; q < Tensor<2,dim>::n_independent_components ; ++q)
-              strain[Tensor<2,dim>::unrolled_to_component_indices(q)] = composition[q];
-            const SymmetricTensor<2,dim> L = symmetrize( strain * transpose(strain) );
-
-            const double strain_ii = std::fabs(second_invariant(L));
-            yield_parameters = calculate_plastic_weakening(strain_ii, j);
-            viscous_weakening = calculate_viscous_weakening(strain_ii, j);
-            break;
-          }
-          case total_strain:
-          {
-            const unsigned int total_strain_index = this->introspection().compositional_index_for_name("total_strain");
-            yield_parameters = calculate_plastic_weakening(composition[total_strain_index], j);
-            viscous_weakening = calculate_viscous_weakening(composition[total_strain_index], j);
-            break;
-          }
-          case plastic_weakening_with_total_strain_only:
-          {
-            const unsigned int total_strain_index = this->introspection().compositional_index_for_name("total_strain");
-            yield_parameters = calculate_plastic_weakening(composition[total_strain_index], j);
-            break;
-          }
-          case plastic_weakening_with_plastic_strain_only:
-          {
-            const unsigned int plastic_strain_index = this->introspection().compositional_index_for_name("plastic_strain");
-            yield_parameters = calculate_plastic_weakening(composition[plastic_strain_index], j);
-            break;
-          }
-          case plastic_weakening_with_plastic_strain_and_viscous_weakening_with_viscous_strain:
-          {
-            const unsigned int plastic_strain_index = this->introspection().compositional_index_for_name("plastic_strain");
-            yield_parameters = calculate_plastic_weakening(composition[plastic_strain_index], j);
-            const unsigned int viscous_strain_index = this->introspection().compositional_index_for_name("viscous_strain");
-            viscous_weakening = calculate_viscous_weakening(composition[viscous_strain_index], j);
-            break;
-          }
-          case viscous_weakening_with_viscous_strain_only:
-          {
-            const unsigned int viscous_strain_index = this->introspection().compositional_index_for_name("viscous_strain");
-            viscous_weakening = calculate_viscous_weakening(composition[viscous_strain_index], j);
-            break;
-          }
-          default:
-          {
-            AssertThrow(false, ExcNotImplemented());
-            break;
-          }
-        }
-
-      std::array<double, 3> weakened_values = {yield_parameters.first,yield_parameters.second,viscous_weakening};
-
-      return weakened_values;
-
-    }
-
-
-    template <int dim>
-    std::pair<double, double>
-    ViscoPlastic<dim>::
-    calculate_plastic_weakening(const double strain_ii,
-                                const unsigned int j) const
-    {
-      // Constrain the second strain invariant of the previous timestep by the strain interval
-      const double cut_off_strain_ii = std::max(std::min(strain_ii,end_plastic_strain_weakening_intervals[j]),start_plastic_strain_weakening_intervals[j]);
-
-      // Linear strain weakening of cohesion and internal friction angle between specified strain values
-      const double strain_fraction = (cut_off_strain_ii - start_plastic_strain_weakening_intervals[j]) /
-                                     (start_plastic_strain_weakening_intervals[j] - end_plastic_strain_weakening_intervals[j]);
-      const double current_coh = cohesions[j] + (cohesions[j] - cohesions[j] * cohesion_strain_weakening_factors[j]) * strain_fraction;
-      const double current_phi = angles_internal_friction[j] + (angles_internal_friction[j] - angles_internal_friction[j] * friction_strain_weakening_factors[j]) * strain_fraction;
-
-      return std::make_pair (current_coh, current_phi);
-    }
-
-
-    template <int dim>
-    double
-    ViscoPlastic<dim>::
-    calculate_viscous_weakening(const double strain_ii,
-                                const unsigned int j) const
-    {
-      // Constrain the second strain invariant of the previous timestep by the strain interval
-      const double cut_off_strain_ii = std::max(std::min(strain_ii,end_viscous_strain_weakening_intervals[j]),start_viscous_strain_weakening_intervals[j]);
-
-      // Linear strain weakening of the viscous flow law prefactors between specified strain values
-      const double strain_fraction = (cut_off_strain_ii - start_viscous_strain_weakening_intervals[j]) /
-                                     (start_viscous_strain_weakening_intervals[j] - end_viscous_strain_weakening_intervals[j]);
-      return 1. + ( 1. - viscous_strain_weakening_factors[j] ) * strain_fraction;
-    }
-
-
-    template <int dim>
     void
     ViscoPlastic<dim>::
     fill_plastic_outputs(const unsigned int i,
@@ -346,21 +251,18 @@ namespace aspect
 
       if (plastic_out != nullptr)
         {
-          double C = 0.;
-          double phi = 0.;
+          plastic_out->cohesions[i] = 0;
+          plastic_out->friction_angles[i] = 0;
+          plastic_out->yielding[i] = plastic_yielding ? 1 : 0;
 
           // set to weakened values, or unweakened values when strain weakening is not used
           for (unsigned int j=0; j < volume_fractions.size(); ++j)
             {
-              // Calculate the strain weakened cohesion, friction and viscosity factors
-              const std::array<double, 3> weakened_values = compute_weakened_yield_parameters(j, in.composition[i]);
-              C   += volume_fractions[j] * weakened_values[0];
-              phi += volume_fractions[j] * weakened_values[1];
+              // Calculate the strain weakening factors and weakened values
+              const std::array<double, 3> weakening_factors = strain_rheology.compute_strain_weakening_factors(j, in.composition[i]);
+              plastic_out->cohesions[i]   += volume_fractions[j] * (drucker_prager_parameters.cohesions[j] * weakening_factors[0]);
+              plastic_out->friction_angles[i] += volume_fractions[j] * (drucker_prager_parameters.angles_internal_friction[j] * weakening_factors[1]);
             }
-
-          plastic_out->cohesions[i] = C;
-          plastic_out->friction_angles[i] = phi * 180. / numbers::PI;
-          plastic_out->yielding[i] = plastic_yielding ? 1 : 0;
         }
     }
 
@@ -469,84 +371,15 @@ namespace aspect
     }
 
 
-
-    template <int dim>
-    void
-    ViscoPlastic<dim>::
-    compute_finite_strain_reaction_terms(const MaterialModel::MaterialModelInputs<dim> &in,
-                                         MaterialModel::MaterialModelOutputs<dim> &out) const
-    {
-      // We need the velocity gradient for the finite strain (they are not included in material model inputs),
-      // so we get them from the finite element.
-
-      std::vector<Point<dim> > quadrature_positions(in.position.size());
-      for (unsigned int i=0; i < in.position.size(); ++i)
-        quadrature_positions[i] = this->get_mapping().transform_real_to_unit_cell(in.current_cell, in.position[i]);
-
-      FEValues<dim> fe_values (this->get_mapping(),
-                               this->get_fe(),
-                               Quadrature<dim>(quadrature_positions),
-                               update_gradients);
-
-      std::vector<Tensor<2,dim> > velocity_gradients (quadrature_positions.size(), Tensor<2,dim>());
-
-      fe_values.reinit (in.current_cell);
-      fe_values[this->introspection().extractors.velocities].get_function_gradients (this->get_solution(),
-                                                                                     velocity_gradients);
-
-      // Assign the strain components to the compositional fields reaction terms.
-      // If there are too many fields, we simply fill only the first fields with the
-      // existing strain tensor components.
-      for (unsigned int q=0; q < in.position.size(); ++q)
-        {
-          // Convert the compositional fields into the tensor quantity they represent.
-          Tensor<2,dim> strain;
-          const unsigned int n_first = this->introspection().compositional_index_for_name("s11");
-          for (unsigned int i = n_first; i < n_first + Tensor<2,dim>::n_independent_components ; ++i)
-            {
-              strain[Tensor<2,dim>::unrolled_to_component_indices(i)] = in.composition[q][i];
-            }
-
-          // Compute the strain accumulated in this timestep.
-          const Tensor<2,dim> strain_increment = this->get_timestep() * (velocity_gradients[q] * strain);
-
-          // Output the strain increment component-wise to its respective compositional field's reaction terms.
-          for (unsigned int i = n_first; i < n_first + Tensor<2,dim>::n_independent_components ; ++i)
-            {
-              out.reaction_terms[q][i] = strain_increment[Tensor<2,dim>::unrolled_to_component_indices(i)];
-            }
-        }
-    }
-
-
-
     template <int dim>
     ComponentMask
     ViscoPlastic<dim>::
     get_volumetric_composition_mask() const
     {
-      // Store which components to exclude during volume fraction computation.
-      ComponentMask composition_mask(this->n_compositional_fields(),true);
-      if (weakening_mechanism != none)
-        {
-          if (weakening_mechanism == plastic_weakening_with_plastic_strain_only || weakening_mechanism == plastic_weakening_with_plastic_strain_and_viscous_weakening_with_viscous_strain)
-            composition_mask.set(this->introspection().compositional_index_for_name("plastic_strain"),false);
+      // Store which components to exclude during the volume fraction computation.
+      ComponentMask strain_mask = strain_rheology.get_strain_composition_mask();
 
-          if (weakening_mechanism == viscous_weakening_with_viscous_strain_only || weakening_mechanism == plastic_weakening_with_plastic_strain_and_viscous_weakening_with_viscous_strain)
-            composition_mask.set(this->introspection().compositional_index_for_name("viscous_strain"),false);
-
-          if (weakening_mechanism == total_strain || weakening_mechanism == plastic_weakening_with_total_strain_only)
-            composition_mask.set(this->introspection().compositional_index_for_name("total_strain"),false);
-
-          if (weakening_mechanism == finite_strain_tensor)
-            {
-              const unsigned int n_start = this->introspection().compositional_index_for_name("s11");
-              for (unsigned int i = n_start; i < n_start + Tensor<2,dim>::n_independent_components ; ++i)
-                composition_mask.set(i,false);
-            }
-        }
-
-      return composition_mask;
+      return strain_mask;
     }
 
 
@@ -560,27 +393,25 @@ namespace aspect
       // Store which components do not represent volumetric compositions (e.g. strain components).
       const ComponentMask volumetric_compositions = get_volumetric_composition_mask();
 
+      EquationOfStateOutputs<dim> eos_outputs (this->n_compositional_fields()+1);
+
       // Loop through all requested points
       for (unsigned int i=0; i < in.temperature.size(); ++i)
         {
+          equation_of_state.evaluate(in, i, eos_outputs);
+
           // First compute the equation of state variables and thermodynamic properties
-          out.densities[i] = 0.0;
-          out.thermal_expansion_coefficients[i] = 0.0;
-          out.specific_heat[i] = 0.0;
+          const std::vector<double> volume_fractions = MaterialUtilities::compute_volume_fractions(in.composition[i], volumetric_compositions);
+
+          // not strictly correct if thermal expansivities are different, since we are interpreting
+          // these compositions as volume fractions, but the error introduced should not be too bad.
+          out.densities[i] = MaterialUtilities::average_value (volume_fractions, eos_outputs.densities, MaterialUtilities::arithmetic);
+          out.thermal_expansion_coefficients[i] = MaterialUtilities::average_value (volume_fractions, eos_outputs.thermal_expansion_coefficients, MaterialUtilities::arithmetic);
+          out.specific_heat[i] = MaterialUtilities::average_value (volume_fractions, eos_outputs.specific_heat_capacities, MaterialUtilities::arithmetic);
           double thermal_diffusivity = 0.0;
 
-          const std::vector<double> volume_fractions = MaterialUtilities::compute_volume_fractions(in.composition[i], volumetric_compositions);
           for (unsigned int j=0; j < volume_fractions.size(); ++j)
-            {
-              // not strictly correct if thermal expansivities are different, since we are interpreting
-              // these compositions as volume fractions, but the error introduced should not be too bad.
-              const double temperature_factor = (1.0 - thermal_expansivities[j] * (in.temperature[i] - reference_T));
-
-              out.densities[i] += volume_fractions[j] * densities[j] * temperature_factor;
-              out.thermal_expansion_coefficients[i] += volume_fractions[j] * thermal_expansivities[j];
-              out.specific_heat[i] += volume_fractions[j] * heat_capacities[j];
-              thermal_diffusivity += volume_fractions[j] * thermal_diffusivities[j];
-            }
+            thermal_diffusivity += volume_fractions[j] * thermal_diffusivities[j];
 
           // Thermal conductivity at the given positions. If the temperature equation uses
           // the reference density profile formulation, use the reference density to
@@ -594,9 +425,9 @@ namespace aspect
           else
             out.thermal_conductivities[i] = thermal_diffusivity * out.specific_heat[i] * out.densities[i];
 
-          out.compressibilities[i] = 0.0;
-          out.entropy_derivative_pressure[i] = 0.0;
-          out.entropy_derivative_temperature[i] = 0.0;
+          out.compressibilities[i] = MaterialUtilities::average_value (volume_fractions, eos_outputs.compressibilities, MaterialUtilities::arithmetic);
+          out.entropy_derivative_pressure[i] = MaterialUtilities::average_value (volume_fractions, eos_outputs.entropy_derivative_pressure, MaterialUtilities::arithmetic);
+          out.entropy_derivative_temperature[i] = MaterialUtilities::average_value (volume_fractions, eos_outputs.entropy_derivative_temperature, MaterialUtilities::arithmetic);
 
           // Compute the effective viscosity if requested and retrieve whether the material is plastically yielding
           bool plastic_yielding = false;
@@ -632,38 +463,15 @@ namespace aspect
           for (unsigned int c=0; c<in.composition[i].size(); ++c)
             out.reaction_terms[i][c] = 0.0;
 
-          // If strain weakening is used, overwrite the first reaction term,
-          // which represents the second invariant of the (plastic) strain tensor.
-          // If plastic strain is tracked (so not the total strain), only overwrite
-          // when plastically yielding.
-          // If viscous strain is also tracked, overwrite the second reaction term as well.
-          if  (this->get_timestep_number() > 0 && in.strain_rate.size())
-            {
-              const double edot_ii = std::max(sqrt(std::fabs(second_invariant(deviator(in.strain_rate[i])))),min_strain_rate);
-              const double e_ii = edot_ii*this->get_timestep();
-              if (weakening_mechanism == plastic_weakening_with_plastic_strain_only && plastic_yielding == true)
-                out.reaction_terms[i][this->introspection().compositional_index_for_name("plastic_strain")] = e_ii;
-              if (weakening_mechanism == viscous_weakening_with_viscous_strain_only && plastic_yielding == false)
-                out.reaction_terms[i][this->introspection().compositional_index_for_name("viscous_strain")] = e_ii;
-              if (weakening_mechanism == total_strain || weakening_mechanism == plastic_weakening_with_total_strain_only)
-                out.reaction_terms[i][this->introspection().compositional_index_for_name("total_strain")] = e_ii;
-              if (weakening_mechanism == plastic_weakening_with_plastic_strain_and_viscous_weakening_with_viscous_strain)
-                {
-                  if (plastic_yielding == true)
-                    out.reaction_terms[i][this->introspection().compositional_index_for_name("plastic_strain")] = e_ii;
-                  else
-                    out.reaction_terms[i][this->introspection().compositional_index_for_name("viscous_strain")] = e_ii;
-                }
-            }
+          // Calculate changes in strain invariants and update the reaction terms
+          strain_rheology.fill_reaction_outputs(in, i, min_strain_rate, plastic_yielding, out);
 
           // Fill plastic outputs if they exist.
           fill_plastic_outputs(i,volume_fractions,plastic_yielding,in,out);
         }
 
       // If we use the full strain tensor, compute the change in the individual tensor components.
-      if (in.current_cell.state() == IteratorState::valid && weakening_mechanism == finite_strain_tensor
-          && this->get_timestep_number() > 0 && in.strain_rate.size())
-        compute_finite_strain_reaction_terms(in, out);
+      strain_rheology.compute_finite_strain_reaction_terms(in, out);
     }
 
     template <int dim>
@@ -679,7 +487,7 @@ namespace aspect
     ViscoPlastic<dim>::
     is_compressible () const
     {
-      return false;
+      return equation_of_state.is_compressible();
     }
 
     template <int dim>
@@ -697,9 +505,13 @@ namespace aspect
       {
         prm.enter_subsection ("Visco Plastic");
         {
+          EquationOfState::MulticomponentIncompressible<dim>::declare_parameters (prm);
+
+          Rheology::StrainDependent<dim>::declare_parameters (prm);
+
           // Reference and minimum/maximum values
           prm.declare_entry ("Reference temperature", "293", Patterns::Double(0),
-                             "For calculating density by thermal expansivity. Units: $K$");
+                             "For calculating density by thermal expansivity. Units: $\\si{K}$");
           prm.declare_entry ("Minimum strain rate", "1.0e-20", Patterns::Double(0),
                              "Stabilizes strain dependent viscosity. Units: $1 / s$");
           prm.declare_entry ("Reference strain rate","1.0e-15",Patterns::Double(0),
@@ -736,159 +548,8 @@ namespace aspect
                              "List of thermal diffusivities, for background material and compositional fields, "
                              "for a total of N+1 values, where N is the number of compositional fields. "
                              "If only one value is given, then all use the same value.  Units: $m^2/s$");
-          prm.declare_entry ("Heat capacities", "1.25e3",
-                             Patterns::List(Patterns::Double(0)),
-                             "List of heat capacities $C_p$, for background material and compositional fields, "
-                             "for a total of N+1 values, where N is the number of compositional fields. "
-                             "If only one value is given, then all use the same value.  Units: $J/kg/K$");
-          prm.declare_entry ("Densities", "3300.",
-                             Patterns::List(Patterns::Double(0)),
-                             "List of densities, $\\rho$, for background material and compositional fields, "
-                             "for a total of N+1 values, where N is the number of compositional fields. "
-                             "If only one value is given, then all use the same value.  Units: $kg / m^3$");
-          prm.declare_entry ("Thermal expansivities", "3.5e-5",
-                             Patterns::List(Patterns::Double(0)),
-                             "List of thermal expansivities for background material and compositional fields, "
-                             "for a total of N+1 values, where N is the number of compositional fields. "
-                             "If only one value is given, then all use the same value.  Units: $1 / K$");
-
-          // Strain weakening parameters
-          prm.declare_entry ("Strain weakening mechanism", "default",
-                             Patterns::Selection("none|finite strain tensor|total strain|plastic weakening with plastic strain only|plastic weakening with total strain only|plastic weakening with plastic strain and viscous weakening with viscous strain|viscous weakening with viscous strain only|default"),
-                             "Whether to apply strain weakening to viscosity, cohesion and internal angle"
-                             "of friction based on accumulated finite strain, and if yes, which method to "
-                             "use. The following methods are available:"
-                             "\n\n"
-                             "\\item ``none'': No strain weakening is applied. "
-                             "\n\n"
-                             "\\item ``finite strain tensor'': The full finite strain tensor is tracked, "
-                             "and its second invariant is used to weaken both the plastic yield stress "
-                             "(specifically, the cohesion and friction angle) and the pre-yield viscosity "
-                             "that arises from diffusion and/or dislocation creep."
-                             "\n\n"
-                             "\\item ``total strain'': The finite strain is approximated as the product of "
-                             "the second invariant of the strain rate in each time step and the time step "
-                             "size, and this quantity is integrated and tracked over time. It is used to "
-                             "weaken both the plastic yield stress (specifically, the cohesion and friction "
-                             "angle) and the pre-yield viscosity."
-                             "\n\n"
-                             "\\item ``plastic weakening with plastic strain only'': The finite strain is "
-                             "approximated as the product of the second invariant of the strain rate"
-                             "in each time step and the time step size in regions where material is "
-                             "plastically yielding. This quantity is integrated and tracked over time, and "
-                             "used to weaken the cohesion and friction angle. The pre-yield viscosity is "
-                             "not weakened."
-                             "\n\n"
-                             "\\item ``plastic weakening with total strain only'': The finite strain is "
-                             "approximated as the product of the second invariant of the strain rate in each "
-                             "time step and the time step size, and this quantity is integrated and tracked "
-                             "over time. It is used to weaken the plastic yield stress (specifically, the "
-                             "cohesion and internal friction angle). The pre-yield viscosity is not weakened."
-                             "\n\n"
-                             "\\item ``plastic weakening with plastic strain and viscous weakening with viscous strain'': "
-                             "Both the finite strain accumulated by plastic deformation and by viscous deformation are "
-                             "computed separately (each approximated as the product of the second invariant of the "
-                             "corresponding strain rate in each time step and the time step size). The plastic strain "
-                             "is used to weaken the plastic yield stress (specifically, the cohesion and yield angle), and "
-                             "the viscous strain is used to weaken the pre-yield viscosity."
-                             "\n\n"
-                             "\\item ``viscous weakening with viscous strain only'': The finite strain is "
-                             "approximated as the product of the second invariant of the strain rate "
-                             "in each time step and the time step size in regions where material is "
-                             "not plastically yielding. This quantity is integrated and tracked over time, and "
-                             "used to weaken the the pre-yield viscosity. The cohesion and friction angle are "
-                             "not weakened."
-                             "\n\n"
-                             "\\item ``default'': The default option has the same behavior as ``none'', "
-                             "but is there to make sure that the original parameters for specifying the "
-                             "strain weakening mechanism (``Use plastic/viscous strain weakening'') are still allowed, "
-                             "but to guarantee that one uses either the old parameter names or the new ones, "
-                             "never both.");
-          prm.declare_entry ("Use strain weakening", "default",
-                             Patterns::Selection("true|false|default"),
-                             "Apply strain weakening to viscosity, cohesion and internal angle "
-                             "of friction based on accumulated finite strain.  Units: None. "
-                             "By default, this parameter is set to false. The default option is there "
-                             "to make sure that the parameter is not used at the same time as the "
-                             "``Strain weakening mechanism'' parameter, which has the same functionality. "
-                             "This parameter is deprecated; please use ``Strain weakening mechanism'' "
-                             "instead!");
-          prm.declare_entry ("Use plastic strain weakening", "default",
-                             Patterns::Selection("true|false|default"),
-                             "Apply strain weakening to cohesion and internal angle "
-                             "of friction based on accumulated finite plastic strain only. Units: None. "
-                             "By default, this parameter is set to false. The default option is there "
-                             "to make sure that the parameter is not used at the same time as the "
-                             "``Strain weakening mechanism'' parameter, which has the same functionality. "
-                             "This parameter is deprecated; please use ``Strain weakening mechanism'' "
-                             "instead!");
-          prm.declare_entry ("Use viscous strain weakening", "default",
-                             Patterns::Selection("true|false|default"),
-                             "Apply strain weakening to diffusion and dislocation viscosity prefactors "
-                             "based on accumulated finite viscous strain only. Units: None. "
-                             "By default, this parameter is set to false. The default option is there "
-                             "to make sure that the parameter is not used at the same time as the "
-                             "``Strain weakening mechanism'' parameter, which has the same functionality. "
-                             "This parameter is deprecated; please use ``Strain weakening mechanism'' "
-                             "instead!");
-          prm.declare_entry ("Use finite strain tensor", "default",
-                             Patterns::Selection("true|false|default"),
-                             "Track and use the full finite strain tensor for strain weakening. "
-                             "Units: None. "
-                             "By default, this parameter is set to false. The default option is there "
-                             "to make sure that the parameter is not used at the same time as the "
-                             "``Strain weakening mechanism'' parameter, which has the same functionality. "
-                             "This parameter is deprecated; please use ``Strain weakening mechanism'' "
-                             "instead!");
-          prm.declare_entry ("Start plasticity strain weakening intervals", "0.",
-                             Patterns::List(Patterns::Double(0)),
-                             "List of strain weakening interval initial strains "
-                             "for the cohesion and friction angle parameters of the "
-                             "background material and compositional fields, "
-                             "for a total of N+1 values, where N is the number of compositional fields. "
-                             "If only one value is given, then all use the same value. Units: None");
-          prm.declare_entry ("End plasticity strain weakening intervals", "1.",
-                             Patterns::List(Patterns::Double(0)),
-                             "List of strain weakening interval final strains "
-                             "for the cohesion and friction angle parameters of the "
-                             "background material and compositional fields, "
-                             "for a total of N+1 values, where N is the number of compositional fields. "
-                             "If only one value is given, then all use the same value.  Units: None");
-          prm.declare_entry ("Start prefactor strain weakening intervals", "0.",
-                             Patterns::List(Patterns::Double(0)),
-                             "List of strain weakening interval initial strains "
-                             "for the diffusion and dislocation prefactor parameters of the "
-                             "background material and compositional fields, "
-                             "for a total of N+1 values, where N is the number of compositional fields. "
-                             "If only one value is given, then all use the same value.  Units: None");
-          prm.declare_entry ("End prefactor strain weakening intervals", "1.",
-                             Patterns::List(Patterns::Double(0)),
-                             "List of strain weakening interval final strains "
-                             "for the diffusion and dislocation prefactor parameters of the "
-                             "background material and compositional fields, "
-                             "for a total of N+1 values, where N is the number of compositional fields. "
-                             "If only one value is given, then all use the same value.  Units: None");
-          prm.declare_entry ("Prefactor strain weakening factors", "1.",
-                             Patterns::List(Patterns::Double(0,1)),
-                             "List of viscous strain weakening factors "
-                             "for background material and compositional fields, "
-                             "for a total of N+1 values, where N is the number of compositional fields. "
-                             "If only one value is given, then all use the same value.  Units: None");
-          prm.declare_entry ("Cohesion strain weakening factors", "1.",
-                             Patterns::List(Patterns::Double(0)),
-                             "List of cohesion strain weakening factors "
-                             "for background material and compositional fields, "
-                             "for a total of N+1 values, where N is the number of compositional fields. "
-                             "If only one value is given, then all use the same value.  Units: None");
-          prm.declare_entry ("Friction strain weakening factors", "1.",
-                             Patterns::List(Patterns::Double(0)),
-                             "List of friction strain weakening factors "
-                             "for background material and compositional fields, "
-                             "for a total of N+1 values, where N is the number of compositional fields. "
-                             "If only one value is given, then all use the same value.  Units: None");
 
           // Rheological parameters
-          prm.declare_entry ("Grain size", "1e-3", Patterns::Double(0), "Units: $m$");
           prm.declare_entry ("Viscosity averaging scheme", "harmonic",
                              Patterns::Selection("arithmetic|harmonic|geometric|maximum composition"),
                              "When more than one compositional field is present at a point "
@@ -906,70 +567,13 @@ namespace aspect
                              "and stress limiter options.");
 
           // Diffusion creep parameters
-          prm.declare_entry ("Prefactors for diffusion creep", "1.5e-15",
-                             Patterns::List(Patterns::Double(0)),
-                             "List of viscosity prefactors, $A$, for background material and compositional fields, "
-                             "for a total of N+1 values, where N is the number of compositional fields. "
-                             "If only one value is given, then all use the same value. "
-                             "Units: $Pa^{-1} m^{m_{\\text{diffusion}}} s^{-1}$");
-          prm.declare_entry ("Stress exponents for diffusion creep", "1",
-                             Patterns::List(Patterns::Double(0)),
-                             "List of stress exponents, $n_{\\text{diffusion}}$, for background material and compositional fields, "
-                             "for a total of N+1 values, where N is the number of compositional fields. "
-                             "If only one value is given, then all use the same value.  Units: None");
-          prm.declare_entry ("Grain size exponents for diffusion creep", "3",
-                             Patterns::List(Patterns::Double(0)),
-                             "List of grain size exponents, $m_{\\text{diffusion}}$, for background material and compositional fields, "
-                             "for a total of N+1 values, where N is the number of compositional fields. "
-                             "If only one value is given, then all use the same value. Units: None");
-          prm.declare_entry ("Activation energies for diffusion creep", "375e3",
-                             Patterns::List(Patterns::Double(0)),
-                             "List of activation energies, $E_a$, for background material and compositional fields, "
-                             "for a total of N+1 values, where N is the number of compositional fields. "
-                             "If only one value is given, then all use the same value.  Units: $J / mol$");
-          prm.declare_entry ("Activation volumes for diffusion creep", "6e-6",
-                             Patterns::List(Patterns::Double(0)),
-                             "List of activation volumes, $V_a$, for background material and compositional fields, "
-                             "for a total of N+1 values, where N is the number of compositional fields. "
-                             "If only one value is given, then all use the same value.  Units: $m^3 / mol$");
+          Rheology::DiffusionCreep<dim>::declare_parameters(prm);
 
           // Dislocation creep parameters
-          prm.declare_entry ("Prefactors for dislocation creep", "1.1e-16",
-                             Patterns::List(Patterns::Double(0)),
-                             "List of viscosity prefactors, $A$, for background material and compositional fields, "
-                             "for a total of N+1 values, where N is the number of compositional fields. "
-                             "If only one value is given, then all use the same value. "
-                             "Units: $Pa^{-n_{\\text{dislocation}}} s^{-1}$");
-          prm.declare_entry ("Stress exponents for dislocation creep", "3.5",
-                             Patterns::List(Patterns::Double(0)),
-                             "List of stress exponents, $n_{\\text{dislocation}}$, for background material and compositional fields, "
-                             "for a total of N+1 values, where N is the number of compositional fields. "
-                             "If only one value is given, then all use the same value.  Units: None");
-          prm.declare_entry ("Activation energies for dislocation creep", "530e3",
-                             Patterns::List(Patterns::Double(0)),
-                             "List of activation energies, $E_a$, for background material and compositional fields, "
-                             "for a total of N+1 values, where N is the number of compositional fields. "
-                             "If only one value is given, then all use the same value.  Units: $J / mol$");
-          prm.declare_entry ("Activation volumes for dislocation creep", "1.4e-5",
-                             Patterns::List(Patterns::Double(0)),
-                             "List of activation volumes, $V_a$, for background material and compositional fields, "
-                             "for a total of N+1 values, where N is the number of compositional fields. "
-                             "If only one value is given, then all use the same value.  Units: $m^3 / mol$");
+          Rheology::DislocationCreep<dim>::declare_parameters(prm);
 
-
-          // Plasticity parameters
-          prm.declare_entry ("Angles of internal friction", "0",
-                             Patterns::List(Patterns::Double(0)),
-                             "List of angles of internal friction, $\\phi$, for background material and compositional fields, "
-                             "for a total of N+1 values, where N is the number of compositional fields. "
-                             "For a value of zero, in 2D the von Mises criterion is retrieved. "
-                             "Angles higher than 30 degrees are harder to solve numerically. Units: degrees.");
-          prm.declare_entry ("Cohesions", "1e20",
-                             Patterns::List(Patterns::Double(0)),
-                             "List of cohesions, $C$, for background material and compositional fields, "
-                             "for a total of N+1 values, where N is the number of compositional fields. "
-                             "The extremely large default cohesion value (1e20 Pa) prevents the viscous stress from "
-                             "exceeding the yield stress. Units: $Pa$.");
+          // Drucker Prager plasticity parameters
+          Rheology::DruckerPrager<dim>::declare_parameters(prm);
 
           // Stress limiter parameters
           prm.declare_entry ("Stress limiter exponents", "1.0",
@@ -978,13 +582,6 @@ namespace aspect
                              "for background material and compositional fields, "
                              "for a total of N+1 values, where N is the number of compositional fields. "
                              "Units: none.");
-
-          // Limit maximum value of the drucker-prager yield stress
-          prm.declare_entry ("Maximum yield stress", "1e12", Patterns::Double(0),
-                             "Limits the maximum value of the yield stress determined by the "
-                             "drucker-prager plasticity parameters. Default value is chosen so this "
-                             "is not automatically used. Values of 100e6--1000e6 $Pa$ have been used "
-                             "in previous models. Units: $Pa$");
 
           // Temperature in viscosity laws to include an adiabat (note units of K/Pa)
           prm.declare_entry ("Adiabat temperature gradient for viscosity", "0.0", Patterns::Double(0),
@@ -1011,189 +608,28 @@ namespace aspect
       // increment by one for background:
       const unsigned int n_fields = this->n_compositional_fields() + 1;
 
-      // number of required compositional fields for full finite strain tensor
-      const unsigned int s = Tensor<2,dim>::n_independent_components;
-
       prm.enter_subsection("Material model");
       {
         prm.enter_subsection ("Visco Plastic");
         {
+          // Equation of state parameters
+          equation_of_state.initialize_simulator (this->get_simulator());
+          equation_of_state.parse_parameters (prm);
+
+          strain_rheology.initialize_simulator (this->get_simulator());
+          strain_rheology.parse_parameters(prm);
+
           // Reference and minimum/maximum values
-          reference_T = prm.get_double("Reference temperature");
           min_strain_rate = prm.get_double("Minimum strain rate");
           ref_strain_rate = prm.get_double("Reference strain rate");
           min_visc = prm.get_double ("Minimum viscosity");
           max_visc = prm.get_double ("Maximum viscosity");
           ref_visc = prm.get_double ("Reference viscosity");
 
-          // Equation of state parameters
           thermal_diffusivities = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Thermal diffusivities"))),
                                                                           n_fields,
                                                                           "Thermal diffusivities");
-          heat_capacities = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Heat capacities"))),
-                                                                    n_fields,
-                                                                    "Heat capacities");
 
-          // ---- Compositional parameters
-          grain_size = prm.get_double("Grain size");
-          densities = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Densities"))),
-                                                              n_fields,
-                                                              "Densities");
-          thermal_expansivities = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Thermal expansivities"))),
-                                                                          n_fields,
-                                                                          "Thermal expansivities");
-
-          // Strain weakening parameters
-          if (prm.get ("Strain weakening mechanism") == "none")
-            weakening_mechanism = none;
-          else if (prm.get ("Strain weakening mechanism") == "finite strain tensor")
-            weakening_mechanism = finite_strain_tensor;
-          else if (prm.get ("Strain weakening mechanism") == "total strain")
-            weakening_mechanism = total_strain;
-          else if (prm.get ("Strain weakening mechanism") == "plastic weakening with plastic strain only")
-            weakening_mechanism = plastic_weakening_with_plastic_strain_only;
-          else if (prm.get ("Strain weakening mechanism") == "plastic weakening with total strain only")
-            weakening_mechanism = plastic_weakening_with_total_strain_only;
-          else if (prm.get ("Strain weakening mechanism") == "plastic weakening with plastic strain and viscous weakening with viscous strain")
-            weakening_mechanism = plastic_weakening_with_plastic_strain_and_viscous_weakening_with_viscous_strain;
-          else if (prm.get ("Strain weakening mechanism") == "viscous weakening with viscous strain only")
-            weakening_mechanism = viscous_weakening_with_viscous_strain_only;
-          else if (prm.get ("Strain weakening mechanism") == "default")
-            weakening_mechanism = none;
-          else
-            AssertThrow(false, ExcMessage("Not a valid Strain weakening mechanism!"));
-
-          if (prm.get ("Strain weakening mechanism") != "default")
-            {
-              AssertThrow(prm.get("Use strain weakening") == "default",
-                          ExcMessage("You can not specify both a ``Strain weakening mechanism'' and the "
-                                     "``Use strain weakening'' parameter, as they cover the same functionality. "
-                                     "Please only use the parameter ``Strain weakening mechanism'', "
-                                     "``Use strain weakening'' is deprecated."));
-              AssertThrow(prm.get("Use plastic strain weakening") == "default",
-                          ExcMessage("You can not specify both a ``Strain weakening mechanism'' and the "
-                                     "``Use plastic strain weakening'' parameter, as they cover the same functionality. "
-                                     "Please only use the parameter ``Strain weakening mechanism'', "
-                                     "``Use plastic strain weakening'' is deprecated."));
-              AssertThrow(prm.get("Use viscous strain weakening") == "default",
-                          ExcMessage("You can not specify both a ``Strain weakening mechanism'' and the "
-                                     "``Use viscous strain weakening'' parameter, as they cover the same functionality. "
-                                     "Please only use the parameter ``Strain weakening mechanism'', "
-                                     "``Use viscous strain weakening'' is deprecated."));
-              AssertThrow(prm.get("Use finite strain tensor") == "default",
-                          ExcMessage("You can not specify both a ``Strain weakening mechanism'' and the "
-                                     "``Use finite strain tensor'' parameter, as they cover the same functionality. "
-                                     "Please only use the parameter ``Strain weakening mechanism'', "
-                                     "``Use finite strain tensor'' is deprecated."));
-            }
-          else
-            {
-              // The original parameters can still be used
-              const bool use_strain_weakening         = (prm.get("Use strain weakening") == "true");
-              const bool use_plastic_strain_weakening = (prm.get("Use plastic strain weakening") == "true");
-              const bool use_viscous_strain_weakening = (prm.get("Use viscous strain weakening") == "true");
-              const bool use_finite_strain_tensor     = (prm.get("Use finite strain tensor") == "true");
-
-              if (use_plastic_strain_weakening)
-                AssertThrow(use_strain_weakening,
-                            ExcMessage("If plastic strain weakening is to be used, strain weakening should also be set to true. "));
-
-              if (use_viscous_strain_weakening)
-                AssertThrow(use_strain_weakening,
-                            ExcMessage("If viscous strain weakening is to be used, strain weakening should also be set to true. "));
-
-              if (use_finite_strain_tensor)
-                {
-                  AssertThrow(use_strain_weakening,
-                              ExcMessage("If strain weakening using the full tensor is to be used, strain weakening should also be set to true. "));
-                  AssertThrow(use_plastic_strain_weakening == false && use_viscous_strain_weakening == false,
-                              ExcMessage("If strain weakening using the full tensor is to be used, the total strain will be used for weakening. "));
-                }
-
-              if (!use_strain_weakening)
-                weakening_mechanism = none;
-              else if (use_finite_strain_tensor)
-                weakening_mechanism = finite_strain_tensor;
-              else if (use_plastic_strain_weakening && !use_viscous_strain_weakening)
-                weakening_mechanism = plastic_weakening_with_plastic_strain_only;
-              else if (!use_plastic_strain_weakening && use_viscous_strain_weakening)
-                weakening_mechanism = viscous_weakening_with_viscous_strain_only;
-              else if (use_plastic_strain_weakening && use_viscous_strain_weakening)
-                weakening_mechanism = plastic_weakening_with_plastic_strain_and_viscous_weakening_with_viscous_strain;
-              else if (!use_plastic_strain_weakening && !use_viscous_strain_weakening)
-                weakening_mechanism = total_strain;
-              else
-                AssertThrow(false, ExcInternalError());
-            }
-
-          if (weakening_mechanism == plastic_weakening_with_plastic_strain_only
-              || weakening_mechanism == plastic_weakening_with_plastic_strain_and_viscous_weakening_with_viscous_strain)
-            {
-              AssertThrow(this->introspection().compositional_name_exists("plastic_strain"),
-                          ExcMessage("Material model visco_plastic with plastic strain weakening only works if there is a "
-                                     "compositional field called plastic_strain."));
-            }
-
-          if (weakening_mechanism == viscous_weakening_with_viscous_strain_only
-              || weakening_mechanism == plastic_weakening_with_plastic_strain_and_viscous_weakening_with_viscous_strain)
-            {
-              AssertThrow(this->introspection().compositional_name_exists("viscous_strain"),
-                          ExcMessage("Material model visco_plastic with viscous strain weakening only works if there is a "
-                                     "compositional field called viscous_strain."));
-            }
-
-          if (weakening_mechanism == finite_strain_tensor)
-            {
-              AssertThrow(this->n_compositional_fields() >= s,
-                          ExcMessage("There must be enough compositional fields to track all components of the finite strain tensor (4 in 2D, 9 in 3D). "));
-              // Assert that fields exist and that they are in the right order
-              const unsigned int n_s11 = this->introspection().compositional_index_for_name("s11");
-              const unsigned int n_s12 = this->introspection().compositional_index_for_name("s12");
-              const unsigned int n_s21 = this->introspection().compositional_index_for_name("s21");
-              const unsigned int n_s22 = this->introspection().compositional_index_for_name("s22");
-              AssertThrow(n_s12>n_s11 && n_s21>n_s12 && n_s22 > n_s21,
-                          ExcMessage("Material model visco_plastic with strain weakening using the full strain tensor only works if there "
-                                     "are compositional fields called sij, with i=1,..,dim and j=1,...,dim in the order s11,s12,s21 etc."));
-              if (dim==3)
-                {
-                  const unsigned int n_s13 = this->introspection().compositional_index_for_name("s13");
-                  const unsigned int n_s23 = this->introspection().compositional_index_for_name("s23");
-                  const unsigned int n_s31 = this->introspection().compositional_index_for_name("s31");
-                  const unsigned int n_s32 = this->introspection().compositional_index_for_name("s32");
-                  const unsigned int n_s33 = this->introspection().compositional_index_for_name("s33");
-                  AssertThrow(n_s23 > n_s13 && n_s31 > n_s23 && n_s32 > n_s31 && n_s33 > n_s32,
-                              ExcMessage("Material model visco_plastic with strain weakening using the full strain tensor only works if there "
-                                         "are compositional fields called sij, with i=1,..,dim and j=1,...,dim in the order s11,s12,s21 etc."));
-                  AssertThrow(n_s33 == n_s13+s-1, ExcMessage("The strain tensor components should be represented by consecutive fields."));
-                }
-            }
-
-          if (weakening_mechanism == total_strain || weakening_mechanism == plastic_weakening_with_total_strain_only)
-            AssertThrow(this->introspection().compositional_name_exists("total_strain"),
-                        ExcMessage("Material model visco_plastic with total strain weakening only works if there is a "
-                                   "compositional field called total_strain."));
-
-          start_plastic_strain_weakening_intervals = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Start plasticity strain weakening intervals"))),
-                                                     n_fields,
-                                                     "Start plasticity strain weakening intervals");
-          end_plastic_strain_weakening_intervals = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("End plasticity strain weakening intervals"))),
-                                                   n_fields,
-                                                   "End plasticity strain weakening intervals");
-          start_viscous_strain_weakening_intervals = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Start prefactor strain weakening intervals"))),
-                                                     n_fields,
-                                                     "Start prefactor strain weakening intervals");
-          end_viscous_strain_weakening_intervals = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("End prefactor strain weakening intervals"))),
-                                                   n_fields,
-                                                   "End prefactor strain weakening intervals");
-          viscous_strain_weakening_factors = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Prefactor strain weakening factors"))),
-                                                                                     n_fields,
-                                                                                     "Prefactor strain weakening factors");
-          cohesion_strain_weakening_factors = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Cohesion strain weakening factors"))),
-                                                                                      n_fields,
-                                                                                      "Cohesion strain weakening factors");
-          friction_strain_weakening_factors = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Friction strain weakening factors"))),
-                                                                                      n_fields,
-                                                                                      "Friction strain weakening factors");
 
           viscosity_averaging = MaterialUtilities::parse_compositional_averaging_operation ("Viscosity averaging scheme",
                                 prm);
@@ -1217,49 +653,22 @@ namespace aspect
             AssertThrow(false, ExcMessage("Not a valid yield mechanism."));
 
           // Rheological parameters
-          // Diffusion creep parameters (Stress exponents often but not always 1)
-          prefactors_diffusion = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Prefactors for diffusion creep"))),
-                                                                         n_fields,
-                                                                         "Prefactors for diffusion creep");
-          grain_size_exponents_diffusion = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Grain size exponents for diffusion creep"))),
-                                                                                   n_fields,
-                                                                                   "Grain size exponents for diffusion creep");
-          activation_energies_diffusion = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Activation energies for diffusion creep"))),
-                                                                                  n_fields,
-                                                                                  "Activation energies for diffusion creep");
-          activation_volumes_diffusion = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Activation volumes for diffusion creep"))),
-                                                                                 n_fields,
-                                                                                 "Activation volumes for diffusion creep");
-          // Dislocation creep parameters (Note the lack of grain size exponents)
-          prefactors_dislocation = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Prefactors for dislocation creep"))),
-                                                                           n_fields,
-                                                                           "Prefactors for dislocation creep");
-          stress_exponents_dislocation = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Stress exponents for dislocation creep"))),
-                                                                                 n_fields,
-                                                                                 "Stress exponents for dislocation creep");
-          activation_energies_dislocation = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Activation energies for dislocation creep"))),
-                                                                                    n_fields,
-                                                                                    "Activation energies for dislocation creep");
-          activation_volumes_dislocation = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Activation volumes for dislocation creep"))),
-                                                                                   n_fields,
-                                                                                   "Activation volumes for dislocation creep");
+          // Diffusion creep parameters
+          diffusion_creep.initialize_simulator (this->get_simulator());
+          diffusion_creep.parse_parameters(prm);
+
+          // Dislocation creep parameters
+          dislocation_creep.initialize_simulator (this->get_simulator());
+          dislocation_creep.parse_parameters(prm);
+
           // Plasticity parameters
-          angles_internal_friction = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Angles of internal friction"))),
-                                                                             n_fields,
-                                                                             "Angles of internal friction");
-          // Convert angles from degrees to radians
-          for (unsigned int i = 0; i<n_fields; ++i)
-            angles_internal_friction[i] *= numbers::PI/180.0;
-          cohesions = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Cohesions"))),
-                                                              n_fields,
-                                                              "Cohesions");
+          drucker_prager_parameters = drucker_prager_plasticity.parse_parameters(this->n_compositional_fields()+1,
+                                                                                 prm);
+
           // Stress limiter parameter
           exponents_stress_limiter  = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Stress limiter exponents"))),
                                                                               n_fields,
                                                                               "Stress limiter exponents");
-
-          // Limit maximum value of the drucker-prager yield stress
-          max_yield_strength = prm.get_double("Maximum yield stress");
 
           // Include an adiabat temperature gradient in flow laws
           adiabatic_temperature_gradient_for_viscosity = prm.get_double("Adiabat temperature gradient for viscosity");
@@ -1269,22 +678,6 @@ namespace aspect
                                     "to the temperature for computing the viscosity, because the ambient"
                                     "temperature profile already includes the adiabatic gradient."));
 
-          // Currently, it only makes sense to use this material model with strain weakening when the
-          // nonlinear solver scheme does a single advection iteration. More than one nonlinear advection
-          // iteration will result in the incorrect value of strain being used in the material model, as
-          // the compositional fields representing strain are updated through the reaction terms.
-          if (use_strain_weakening)
-            {
-              AssertThrow((this->get_parameters().nonlinear_solver ==
-                           Parameters<dim>::NonlinearSolver::single_Advection_single_Stokes
-                           ||
-                           this->get_parameters().nonlinear_solver ==
-                           Parameters<dim>::NonlinearSolver::single_Advection_iterated_Stokes),
-                          ExcMessage("The material model will only work with the nonlinear "
-                                     "solver schemes 'single Advection, single Stokes' and "
-                                     "'single Advection, iterated Stokes' when strain "
-                                     "weakening is enabled."));
-            }
 
         }
         prm.leave_subsection();
@@ -1402,7 +795,7 @@ namespace aspect
                                    "the full finite strain tensor through particles."
                                    "When only the second invariant of the strain is tracked, one has the option to "
                                    "track the full strain or only the plastic strain. In the latter case, strain is only tracked "
-                                   "in case the material is plastically yielding, i.e. the viscous stess > yield strength. "
+                                   "in case the material is plastically yielding, i.e. the viscous stess > yield stress. "
                                    ""
                                    "\n\n"
                                    "Viscous stress may also be limited by a non-linear stress limiter "
@@ -1415,10 +808,7 @@ namespace aspect
                                    "and $n_y$ is the stress limiter exponent.  The yield stress, "
                                    "$\\tau_y$, is defined through the Drucker Prager yield criterion "
                                    "formulation. This method of limiting viscous stress has been used "
-                                   "in various forms within the geodynamic literature, including "
-                                   "Christensen (1992), JGR, 97(B2), pp. 2015-2036; "
-                                   "Cizkova and Bina (2013), EPSL, 379, pp. 95-103; "
-                                   "Cizkova and Bina (2015), EPSL, 430, pp. 408-415. "
+                                   "in various forms within the geodynamic literature \\cite{chri92,vavv02,cibi13,cibi15}."
                                    "When $n_y$ is 1, it essentially becomes a linear viscosity model, "
                                    "and in the limit $n_y\\rightarrow \\infty$ it converges to the "
                                    "standard viscosity rescaling method (concretely, values $n_y>20$ "

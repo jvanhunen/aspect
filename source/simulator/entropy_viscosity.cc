@@ -63,10 +63,7 @@ namespace aspect
     // at all quadrature points. keep a running tally of the
     // integral over the entropy as well as the area and the
     // maximal and minimal entropy
-    typename DoFHandler<dim>::active_cell_iterator
-    cell = dof_handler.begin_active(),
-    endc = dof_handler.end();
-    for (; cell!=endc; ++cell)
+    for (const auto &cell : dof_handler.active_cell_iterators())
       if (cell->is_locally_owned())
         {
           fe_values.reinit (cell);
@@ -339,7 +336,9 @@ namespace aspect
         // be advection dominated. Hence, only disable artificial
         // viscosity if flow through the boundary is slow, or
         // tangential.
-        if (advection_field.is_temperature())
+        if (parameters.advection_stabilization_method
+            == Parameters<dim>::AdvectionStabilizationMethod::entropy_viscosity
+            && advection_field.is_temperature())
           {
             const std::set<types::boundary_id> &fixed_temperature_boundaries =
               boundary_temperature_manager.get_fixed_temperature_boundary_indicators();
@@ -524,6 +523,7 @@ namespace aspect
                                                               scratch.finite_element_values,
                                                               introspection);
         material_model->evaluate(scratch.material_model_inputs,scratch.material_model_outputs);
+        heating_model_manager.evaluate(scratch.material_model_inputs,scratch.material_model_outputs,scratch.heating_model_outputs);
 
         if (parameters.formulation_temperature_equation
             == Parameters<dim>::Formulation::TemperatureEquation::reference_density_profile)
@@ -547,13 +547,83 @@ namespace aspect
                                                    scratch.finite_element_values.get_mapping(),
                                                    scratch.material_model_outputs);
 
-        viscosity_per_cell[cell->active_cell_index()] = compute_viscosity(scratch,
-                                                                          global_max_velocity,
-                                                                          global_field_range.second - global_field_range.first,
-                                                                          0.5 * (global_field_range.second + global_field_range.first),
-                                                                          global_entropy_variation,
-                                                                          cell->diameter(),
-                                                                          advection_field);
+        if (parameters.advection_stabilization_method == Parameters<dim>::AdvectionStabilizationMethod::entropy_viscosity)
+          {
+            viscosity_per_cell[cell->active_cell_index()] = compute_viscosity(scratch,
+                                                                              global_max_velocity,
+                                                                              global_field_range.second - global_field_range.first,
+                                                                              0.5 * (global_field_range.second + global_field_range.first),
+                                                                              global_entropy_variation,
+                                                                              cell->diameter(),
+                                                                              advection_field);
+          }
+        else if (parameters.advection_stabilization_method == Parameters<dim>::AdvectionStabilizationMethod::supg)
+          {
+            double norm_of_advection_term = 0.0;
+            double max_conductivity_on_cell = 0.0;
+
+            {
+              for (unsigned int q=0; q<n_q_points; ++q)
+                {
+                  if (advection_field.is_temperature())
+                    {
+                      norm_of_advection_term =
+                        std::max(scratch.current_velocity_values[q].norm()*
+                                 (scratch.material_model_outputs.densities[q] *
+                                  scratch.material_model_outputs.specific_heat[q] +
+                                  scratch.heating_model_outputs.lhs_latent_heat_terms[q]),
+                                 norm_of_advection_term);
+
+                      max_conductivity_on_cell =
+                        std::max(scratch.material_model_outputs.thermal_conductivities[q],max_conductivity_on_cell);
+                    }
+                  else
+                    {
+                      norm_of_advection_term =
+                        std::max(scratch.current_velocity_values[q].norm(),norm_of_advection_term);
+
+                      max_conductivity_on_cell = 0.0;
+                    }
+                }
+            }
+
+            const double fe_order
+              = (advection_field.is_temperature()
+                 ?
+                 parameters.temperature_degree
+                 :
+                 parameters.composition_degree
+                );
+            const double h = cell->diameter();
+            const double eps = max_conductivity_on_cell;
+
+            // SUPG parameter design from "On Discontinuity-Capturing Methods
+            // for Convection-Diffusion Equations" by Volker John and Petr
+            // Knobloch. Also see deal.II step-63:
+            // delta_k = h / (2 \|u\| k) * (coth(Pe) - 1/Pe)
+            // Pe = \| u \| h/(2 p eps)
+            const double peclet_times_eps = norm_of_advection_term * h / (2.0 * fe_order);
+
+            // Instead of Pe < 1, we check Pe*eps < eps as eps can be ==0:
+            if (peclet_times_eps==0.0 || peclet_times_eps < eps)
+              {
+                // Diffusion dominant case, no stabilization needed:
+                viscosity_per_cell[cell->active_cell_index()] = 0.0;
+              }
+            else
+              {
+                // To avoid a division by zero, increase eps slightly. The actual value is not
+                // important, as long as the result is still a valid number. Note that this
+                // is only important if \|u\| and eps are zero.
+                const double peclet = peclet_times_eps / (eps + 1e-100);
+                const double coth_of_peclet = (1.0 + exp(-2.0*peclet)) / (1.0 - exp(-2.0*peclet));
+                const double delta = h/(2.0*norm_of_advection_term*fe_order) * (coth_of_peclet - 1.0/peclet);
+                viscosity_per_cell[cell->active_cell_index()] = delta;
+              }
+            Assert (viscosity_per_cell[cell->active_cell_index()] >= 0, ExcMessage ("tau for SUPG needs to be a nonnegative constant."));
+          }
+        else
+          AssertThrow(false, ExcNotImplemented());
       }
 
     // if set to true, the maximum of the artificial viscosity in the cell as well
@@ -564,30 +634,25 @@ namespace aspect
         viscosity_per_cell_temp.reinit(triangulation.n_active_cells());
 
         viscosity_per_cell_temp = viscosity_per_cell;
-        typename DoFHandler<dim>::active_cell_iterator
-        cell,
-        end_cell = dof_handler.end();
-        for (cell = dof_handler.begin_active(); cell!=end_cell; ++cell)
-          {
-            if (cell->is_locally_owned())
-              {
-                if (skip_interior_cells && !cell->at_boundary())
-                  continue;
+        for (const auto &cell : dof_handler.active_cell_iterators())
+          if (cell->is_locally_owned())
+            {
+              if (skip_interior_cells && !cell->at_boundary())
+                continue;
 
-                for (unsigned int face_no=0; face_no<GeometryInfo<dim>::faces_per_cell; ++face_no)
-                  if (cell->at_boundary(face_no) == false)
-                    {
-                      if (cell->neighbor(face_no)->active())
-                        viscosity_per_cell[cell->active_cell_index()] = std::max(viscosity_per_cell[cell->active_cell_index()],
-                                                                                 viscosity_per_cell_temp[cell->neighbor(face_no)->active_cell_index()]);
-                      else
-                        for (unsigned int l=0; l<cell->neighbor(face_no)->n_children(); ++l)
-                          if (cell->neighbor(face_no)->child(l)->active())
-                            viscosity_per_cell[cell->active_cell_index()] = std::max(viscosity_per_cell[cell->active_cell_index()],
-                                                                                     viscosity_per_cell_temp[cell->neighbor(face_no)->child(l)->active_cell_index()]);
-                    }
-              }
-          }
+              for (unsigned int face_no=0; face_no<GeometryInfo<dim>::faces_per_cell; ++face_no)
+                if (cell->at_boundary(face_no) == false)
+                  {
+                    if (cell->neighbor(face_no)->active())
+                      viscosity_per_cell[cell->active_cell_index()] = std::max(viscosity_per_cell[cell->active_cell_index()],
+                                                                               viscosity_per_cell_temp[cell->neighbor(face_no)->active_cell_index()]);
+                    else
+                      for (unsigned int l=0; l<cell->neighbor(face_no)->n_children(); ++l)
+                        if (cell->neighbor(face_no)->child(l)->active())
+                          viscosity_per_cell[cell->active_cell_index()] = std::max(viscosity_per_cell[cell->active_cell_index()],
+                                                                                   viscosity_per_cell_temp[cell->neighbor(face_no)->child(l)->active_cell_index()]);
+                  }
+            }
       }
   }
 }
