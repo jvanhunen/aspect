@@ -61,6 +61,9 @@ ENDIF()
 
 
 SET(ASPECT_USE_PETSC OFF CACHE BOOL "Use PETSc instead of Trilinos if set to 'on'.")
+IF(ASPECT_USE_PETSC)
+    MESSAGE(FATAL_ERROR "Using PETSc by setting ASPECT_USE_PETSC to ON is currently not supported, see https://github.com/geodynamics/aspect/issues/3338 for details.")
+ENDIF()
 
 MESSAGE(STATUS "Using ASPECT_USE_PETSC = '${ASPECT_USE_PETSC}'")
 
@@ -167,7 +170,7 @@ WRITE_BASIC_PACKAGE_VERSION_FILE(
 
 # Configure a cmake fragment that plugins can use to
 # set up compiler flags, include paths, etc to compile an
-# Aspect plugin.
+# ASPECT plugin.
 # Config for the build dir:
 SET(CONFIG_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/include")
 SET(CONFIG_DIR "${CMAKE_BINARY_DIR}")
@@ -478,6 +481,26 @@ ELSE()
   SET(ASPECT_WITH_PERPLEX OFF)
 ENDIF()
 
+
+# Find the libdap package so that ASPECT can connect to the OPeNDAP servers
+# Author: Kodi Neumiller
+SET(ASPECT_WITH_LIBDAP OFF CACHE BOOL "Check if the user wants to compile ASPECT with the libdap libraries.")
+MESSAGE(STATUS "Using ASPECT_WITH_LIBDAP = '${ASPECT_WITH_LIBDAP}'")
+IF(ASPECT_WITH_LIBDAP)
+  LIST(APPEND CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH}/cmake/modules")
+  FIND_PACKAGE(LIBDAP)
+  IF(${LIBDAP_FOUND})
+    INCLUDE_DIRECTORIES(${LIBDAP_INCLUDE_DIRS})
+    TARGET_LINK_LIBRARIES(${TARGET} ${LIBDAP_LIBRARIES})
+    FOREACH(_source_file ${TARGET_SRC})
+      SET_PROPERTY(SOURCE ${_source_file}
+              APPEND PROPERTY COMPILE_DEFINITIONS HAVE_LIBDAP=1)
+    ENDFOREACH()
+    MESSAGE(STATUS "LIBDAP found at ${LIBDAP_LIBRARY}\n")
+  ELSE()
+    MESSAGE(FATAL_ERROR "LIBDAP not found. Disable ASPECT_WITH_LIBDAP or specify a hint to your installation directory with LIBDAP_DIR.")
+  ENDIF()
+ENDIF()
 
 
 IF (ASPECT_USE_SHARED_LIBS)

@@ -859,6 +859,10 @@ namespace aspect
 
             try
               {
+                AssertThrow (parameters.n_expensive_stokes_solver_steps>0,
+                             ExcMessage ("The Stokes solver did not converge in the number of requested cheap iterations and "
+                                         "you requested 0 for ``Maximum number of expensive Stokes solver steps''. Aborting."));
+
                 solver.solve(stokes_block,
                              distributed_stokes_solution,
                              distributed_stokes_rhs,
@@ -932,7 +936,7 @@ namespace aspect
 
     // convert melt pressures:
     if (parameters.include_melt_transport)
-      melt_handler->compute_melt_variables(solution);
+      melt_handler->compute_melt_variables(system_matrix,solution,system_rhs);
 
     return std::pair<double,double>(initial_nonlinear_residual,
                                     final_linear_residual);

@@ -31,6 +31,8 @@
 #include <aspect/simulator/assemblers/stokes.h>
 #include <aspect/simulator/assemblers/advection.h>
 
+#include <aspect/stokes_matrix_free.h>
+
 #include <deal.II/base/quadrature_lib.h>
 #include <deal.II/base/work_stream.h>
 #include <deal.II/base/signaling_nan.h>
@@ -131,8 +133,10 @@ namespace aspect
 
     if (material_model->is_compressible())
       {
-        assemblers->stokes_preconditioner.push_back(
-          std_cxx14::make_unique<aspect::Assemblers::StokesCompressiblePreconditioner<dim> >());
+        // The compressible part of the preconditioner is only necessary if we use the simplified A block
+        if (parameters.use_full_A_block_preconditioner == false)
+          assemblers->stokes_preconditioner.push_back(
+            std_cxx14::make_unique<aspect::Assemblers::StokesCompressiblePreconditioner<dim> >());
 
         assemblers->stokes_system.push_back(
           std_cxx14::make_unique<aspect::Assemblers::StokesCompressibleStrainRateViscosityTerm<dim> >());
@@ -519,7 +523,7 @@ namespace aspect
         Mp_preconditioner_AMG->initialize (system_preconditioner_matrix.block(1,1), Amg_data);
       }
 
-    if (parameters.mesh_deformation_enabled || parameters.include_melt_transport || parameters.use_full_A_block_preconditioner)
+    if (parameters.use_full_A_block_preconditioner)
       Amg_preconditioner->initialize (system_matrix.block(0,0),
                                       Amg_data);
     else
@@ -560,10 +564,12 @@ namespace aspect
       data.local_pressure_shape_function_integrals = 0;
 
     // initialize the material model data on the cell
+    const bool update_strain_rate =
+      assemble_newton_stokes_system || this->parameters.enable_prescribed_dilation || rebuild_stokes_matrix;
     compute_material_model_input_values (current_linearization_point,
                                          scratch.finite_element_values,
                                          cell,
-                                         assemble_newton_stokes_system ? true : rebuild_stokes_matrix,
+                                         update_strain_rate,
                                          scratch.material_model_inputs);
 
     for (unsigned int i=0; i<assemblers->stokes_system.size(); ++i)
@@ -680,20 +686,21 @@ namespace aspect
   {
     std::string timer_section_name = "Assemble Stokes system";
 
-    // Matrix-free, only assemble RHS
-    if (stokes_matrix_free)
+    if (assemble_newton_stokes_system)
       {
-        rebuild_stokes_matrix = false;
-        timer_section_name += " rhs";
-      }
-    else if (assemble_newton_stokes_system)
-      {
-        if (!assemble_newton_stokes_matrix)
+        if (!assemble_newton_stokes_matrix && !stokes_matrix_free)
           timer_section_name += " rhs";
         else if (assemble_newton_stokes_matrix && newton_handler->parameters.newton_derivative_scaling_factor == 0)
           timer_section_name += " Picard";
         else if (assemble_newton_stokes_matrix && newton_handler->parameters.newton_derivative_scaling_factor != 0)
           timer_section_name += " Newton";
+      }
+
+    if (stokes_matrix_free)
+      {
+        rebuild_stokes_matrix = false;
+        assemble_newton_stokes_matrix = false;
+        timer_section_name += " rhs";
       }
 
     TimerOutput::Scope timer (computing_timer,
@@ -813,6 +820,13 @@ namespace aspect
         make_pressure_rhs_compatible(system_rhs);
       }
 
+
+    // If we change the system_rhs, matrix-free Stokes must update
+    if (stokes_matrix_free)
+      {
+        stokes_matrix_free->evaluate_material_model();
+        stokes_matrix_free->correct_stokes_rhs();
+      }
 
     // record that we have just rebuilt the matrix
     rebuild_stokes_matrix = false;

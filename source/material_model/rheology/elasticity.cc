@@ -173,7 +173,10 @@ namespace aspect
                      Parameters<dim>::NonlinearSolver::single_Advection_single_Stokes
                      ||
                      this->get_parameters().nonlinear_solver ==
-                     Parameters<dim>::NonlinearSolver::single_Advection_iterated_Stokes),
+                     Parameters<dim>::NonlinearSolver::single_Advection_iterated_Stokes
+                     ||
+                     this->get_parameters().nonlinear_solver ==
+                     Parameters<dim>::NonlinearSolver::single_Advection_iterated_Newton_Stokes),
                     ExcMessage("The material model will only work with the nonlinear "
                                "solver schemes 'single Advection, single Stokes' and "
                                "'single Advection, iterated Stokes'"));
@@ -335,7 +338,7 @@ namespace aspect
 
 
       template <int dim>
-      std::vector<double>
+      const std::vector<double> &
       Elasticity<dim>::get_elastic_shear_moduli () const
       {
         return elastic_shear_moduli;
@@ -351,6 +354,21 @@ namespace aspect
       {
         const double dte = elastic_timestep();
         return ( viscosity * dte ) / ( dte + ( viscosity / elastic_shear_modulus ) );
+      }
+
+
+
+      template <int dim>
+      double
+      Elasticity<dim>::
+      calculate_viscoelastic_strain_rate(const SymmetricTensor<2,dim> &strain_rate,
+                                         const SymmetricTensor<2,dim> &stress,
+                                         const double shear_modulus) const
+      {
+        const SymmetricTensor<2,dim> edot = 2. * (deviator(strain_rate)) + stress /
+                                            (shear_modulus * elastic_timestep());
+
+        return std::sqrt(std::fabs(second_invariant(edot)));
       }
     }
   }
