@@ -702,9 +702,6 @@ namespace aspect
           // Dislocation creep parameters
           Rheology::DislocationCreep<dim>::declare_parameters(prm);
 
-          // Depletion strengthening parameters
-          Rheology::DepletionStrengthening<dim>::declare_parameters(prm);
-
           // Drucker Prager plasticity parameters
           Rheology::DruckerPrager<dim>::declare_parameters(prm);
 
