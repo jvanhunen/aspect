@@ -37,30 +37,68 @@ namespace aspect
       {}
 
 
+    template <int dim>
+    double
+    DepletionStrengthening<dim>::melt_fraction (const double temperature,
+                                                const double pressure,
+                                                const std::vector<double> &composition, 
+                                                const Point<dim> &position) const
+      {   
+        // anhydrous melting of peridotite after Katz, 2003
+        const double T_solidus  = A1 + 273.15
+                                  + A2 * pressure
+                                  + A3 * pressure * pressure;
+        const double T_lherz_liquidus = B1 + 273.15
+                                        + B2 * pressure
+                                        + B3 * pressure * pressure;
+        const double T_liquidus = C1 + 273.15
+                                  + C2 * pressure
+                                  + C3 * pressure * pressure;
+  
+        // melt fraction for peridotite with clinopyroxene
+        double melt_fraction;
+        if (temperature < T_solidus || pressure > 1.3e10)
+          melt_fraction = 0.0;
+        else if (temperature > T_lherz_liquidus)
+          melt_fraction = 1.0;
+        else
+          melt_fraction = std::pow((temperature - T_solidus) / (T_lherz_liquidus - T_solidus),beta);
+  
+        // melt fraction after melting of all clinopyroxene
+        const double R_cpx = r1 + r2 * pressure;
+        const double F_max = M_cpx / R_cpx;
+  
+        if (melt_fraction > F_max && temperature < T_liquidus)
+          {   
+            const double T_max = std::pow(F_max,1/beta) * (T_lherz_liquidus - T_solidus) + T_solidus;
+            melt_fraction = F_max + (1 - F_max) * pow((temperature - T_max) / (T_liquidus - T_max),beta);
+          }   
+        return melt_fraction;
+      } 
 
       template <int dim>
       double
       DepletionStrengthening<dim>::compute_depl_effect (const double pressure,
-                                              const double temperature,
-                                              const unsigned int composition) const
+                                                        const double temperature,
+                                                        const std::vector<double> composition) const
       {
         // INFO HERE
-        
-        if (this->introspection().compositional_name_exists("maximum_melt_fraction"))
-           {    
-             // extract depletion = maximum experienced melt fraction:
-             const unsigned int melt_index = this->introspection().compositional_index_for_name("maximum_melt_fraction");
-             const double depletion_visc = std::min(1.0, std::max(composition[melt_index],0.0));
+        unsigned int melt_index = ( (this->introspection().compositional_name_exists("maximum_melt_fraction"))
+                                ?
+                                this->introspection().compositional_index_for_name("maximum_melt_fraction")
+                                :
+                                9999); 
 
-             // calculate strengthening due to depletion:
-             const double depletion_strengthening = std::min(exp(alpha_depletion*depletion_visc),delta_eta_depletion_max);
-           }
-        else
-           {    
-             const double depletion_strengthening = 1.0;
-           }
+        double depletion = ( (melt_index<9999)
+                           ?
+                           std::min(1.0, std::max(composition[melt_index],0.0))
+                           :
+                           0);
+      
+        // calculate strengthening due to depletion:
+        double depl_strengthening = std::min(exp(alpha_depletion*depletion),delta_eta_depletion_max);
 
-        return depletion_strengthening;
+        return depl_strengthening;
       }
 
 
@@ -172,7 +210,7 @@ namespace aspect
 
       template <int dim>
       void
-      DiffusionCreep<dim>::parse_parameters (ParameterHandler &prm)
+      DepletionStrengthening<dim>::parse_parameters (ParameterHandler &prm)
       {
           // Mantle melting parameterization following notation of Katz et al. (2003)
           A1                                = prm.get_double ("A1");

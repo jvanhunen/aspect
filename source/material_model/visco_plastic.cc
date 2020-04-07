@@ -241,8 +241,8 @@ namespace aspect
           viscosity_pre_yield *= weakening_factors[2];
 
           // Step 3c: calculate depletion strengthening
-          const double depletion_strengthening = depletion_strengthening.compute_depl_effect(pressure, temperature_for_viscosity, j);
-          viscosity_pre_yield *= depletion_strengthening;
+          const double depl_strengthening = depletion_strengthening.compute_depl_effect(pressure, temperature_for_viscosity, composition);
+          viscosity_pre_yield *= depl_strengthening;
 
           // Step 4: plastic yielding
 
@@ -483,7 +483,6 @@ namespace aspect
 
           if (this->introspection().compositional_name_exists("maximum_melt_fraction"))
             {    
-              const double depletion = depletion_strengthening.compute_depletion (in.temperature[i], in.pressure[i], in.composition[i], in.position[i]);
               const unsigned int melt_index = this->introspection().compositional_index_for_name("maximum_melt_fraction");
               const double melt_frac = depletion_strengthening.melt_fraction (in.temperature[i], in.pressure[i], in.composition[i], in.position[i]);
               if (in.composition[i][melt_index] < melt_frac)
@@ -823,6 +822,10 @@ namespace aspect
           // Dislocation creep parameters
           dislocation_creep.initialize_simulator (this->get_simulator());
           dislocation_creep.parse_parameters(prm);
+
+          // Depletion strengthening parameters
+          depletion_strengthening.initialize_simulator (this->get_simulator());
+          depletion_strengthening.parse_parameters(prm);
 
           // Plasticity parameters
           drucker_prager_parameters = drucker_prager_plasticity.parse_parameters(this->n_compositional_fields()+1,

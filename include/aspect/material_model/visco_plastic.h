@@ -26,6 +26,7 @@
 #include <aspect/simulator_access.h>
 #include <aspect/material_model/rheology/diffusion_creep.h>
 #include <aspect/material_model/rheology/dislocation_creep.h>
+#include <aspect/material_model/rheology/depletion_strengthening.h>
 #include <aspect/material_model/rheology/drucker_prager.h>
 #include <aspect/material_model/equation_of_state/multicomponent_incompressible.h>
 #include <aspect/material_model/rheology/elasticity.h>
@@ -356,6 +357,7 @@ namespace aspect
          */
         Rheology::DiffusionCreep<dim> diffusion_creep;
         Rheology::DislocationCreep<dim> dislocation_creep;
+        Rheology::DepletionStrengthening<dim> depletion_strengthening;
 
         /*
          * Objects for computing plastic stresses, viscosities, and additional outputs
