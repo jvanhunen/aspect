@@ -96,7 +96,7 @@ namespace aspect
                            "the initial plastic strain values removed.");
 
         prm.declare_entry ("Start plasticity strain weakening intervals", "0.",
-                           Patterns::List(Patterns::Double(0)),
+                           Patterns::List(Patterns::Double (0.)),
                            "List of strain weakening interval initial strains "
                            "for the cohesion and friction angle parameters of the "
                            "background material and compositional fields, "
@@ -104,7 +104,7 @@ namespace aspect
                            "If only one value is given, then all use the same value. Units: None");
 
         prm.declare_entry ("End plasticity strain weakening intervals", "1.",
-                           Patterns::List(Patterns::Double(0)),
+                           Patterns::List(Patterns::Double (0.)),
                            "List of strain weakening interval final strains "
                            "for the cohesion and friction angle parameters of the "
                            "background material and compositional fields, "
@@ -112,21 +112,21 @@ namespace aspect
                            "If only one value is given, then all use the same value.  Units: None");
 
         prm.declare_entry ("Cohesion strain weakening factors", "1.",
-                           Patterns::List(Patterns::Double(0)),
+                           Patterns::List(Patterns::Double (0.)),
                            "List of cohesion strain weakening factors "
                            "for background material and compositional fields, "
                            "for a total of N+1 values, where N is the number of compositional fields. "
                            "If only one value is given, then all use the same value.  Units: None");
 
         prm.declare_entry ("Friction strain weakening factors", "1.",
-                           Patterns::List(Patterns::Double(0)),
+                           Patterns::List(Patterns::Double (0.)),
                            "List of friction strain weakening factors "
                            "for background material and compositional fields, "
                            "for a total of N+1 values, where N is the number of compositional fields. "
                            "If only one value is given, then all use the same value.  Units: None");
 
         prm.declare_entry ("Start prefactor strain weakening intervals", "0.",
-                           Patterns::List(Patterns::Double(0)),
+                           Patterns::List(Patterns::Double (0.)),
                            "List of strain weakening interval initial strains "
                            "for the diffusion and dislocation prefactor parameters of the "
                            "background material and compositional fields, "
@@ -134,7 +134,7 @@ namespace aspect
                            "If only one value is given, then all use the same value.  Units: None");
 
         prm.declare_entry ("End prefactor strain weakening intervals", "1.",
-                           Patterns::List(Patterns::Double(0)),
+                           Patterns::List(Patterns::Double (0.)),
                            "List of strain weakening interval final strains "
                            "for the diffusion and dislocation prefactor parameters of the "
                            "background material and compositional fields, "
@@ -142,7 +142,7 @@ namespace aspect
                            "If only one value is given, then all use the same value.  Units: None");
 
         prm.declare_entry ("Prefactor strain weakening factors", "1.",
-                           Patterns::List(Patterns::Double(0,1)),
+                           Patterns::List(Patterns::Double(0., 1.)),
                            "List of viscous strain weakening factors "
                            "for background material and compositional fields, "
                            "for a total of N+1 values, where N is the number of compositional fields. "
@@ -412,7 +412,7 @@ namespace aspect
         // when plastically yielding.
         // If viscous strain is also tracked, overwrite the second reaction term as well.
         // Calculate changes in strain and update the reaction terms
-        if  (this->simulator_is_past_initialization() && this->get_timestep_number() > 0 && in.strain_rate.size())
+        if  (this->simulator_is_past_initialization() && this->get_timestep_number() > 0 && in.requests_property(MaterialProperties::reaction_terms))
           {
             const double edot_ii = std::max(sqrt(std::fabs(second_invariant(deviator(in.strain_rate[i])))),min_strain_rate);
             const double e_ii = edot_ii*this->get_timestep();
@@ -442,12 +442,12 @@ namespace aspect
                                            MaterialModel::MaterialModelOutputs<dim> &out) const
       {
 
-        if (in.current_cell.state() == IteratorState::valid && this->get_timestep_number() > 0 && in.strain_rate.size())
+        if (in.current_cell.state() == IteratorState::valid && this->get_timestep_number() > 0 && in.requests_property(MaterialProperties::reaction_terms))
           {
             // We need the velocity gradient for the finite strain (they are not
             // in material model inputs), so we get them from the finite element.
-            std::vector<Point<dim> > quadrature_positions(in.position.size());
-            for (unsigned int i=0; i < in.position.size(); ++i)
+            std::vector<Point<dim> > quadrature_positions(in.n_evaluation_points());
+            for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
               quadrature_positions[i] = this->get_mapping().transform_real_to_unit_cell(in.current_cell, in.position[i]);
 
             FEValues<dim> fe_values (this->get_mapping(),
@@ -465,10 +465,10 @@ namespace aspect
             // If there are too many fields, we simply fill only the first fields with the
             // existing strain tensor components.
 
-            for (unsigned int q=0; q < in.position.size(); ++q)
+            for (unsigned int q=0; q < in.n_evaluation_points(); ++q)
               {
                 if (in.current_cell.state() == IteratorState::valid && weakening_mechanism == finite_strain_tensor
-                    && this->get_timestep_number() > 0 && in.strain_rate.size())
+                    && this->get_timestep_number() > 0 && in.requests_property(MaterialProperties::reaction_terms))
 
                   {
                     // Convert the compositional fields into the tensor quantity they represent.

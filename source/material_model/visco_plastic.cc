@@ -147,14 +147,14 @@ namespace aspect
           // gradient used when calculating the viscosity. This allows the same activation volume
           // to be used in incompressible and compressible models.
           const double temperature_for_viscosity = temperature + adiabatic_temperature_gradient_for_viscosity*pressure;
-          Assert(temperature_for_viscosity != 0, ExcMessage(
-                   "The temperature used in the calculation of the visco-plastic rheology is zero. "
-                   "This is not allowed, because this value is used to divide through. It is probably "
-                   "being caused by the temperature being zero somewhere in the model. The relevant "
-                   "values for debugging are: temperature (" + Utilities::to_string(temperature) +
-                   "), adiabatic_temperature_gradient_for_viscosity ("
-                   + Utilities::to_string(adiabatic_temperature_gradient_for_viscosity) + ") and pressure ("
-                   + Utilities::to_string(pressure) + ")."));
+          AssertThrow(temperature_for_viscosity != 0, ExcMessage(
+                        "The temperature used in the calculation of the visco-plastic rheology is zero. "
+                        "This is not allowed, because this value is used to divide through. It is probably "
+                        "being caused by the temperature being zero somewhere in the model. The relevant "
+                        "values for debugging are: temperature (" + Utilities::to_string(temperature) +
+                        "), adiabatic_temperature_gradient_for_viscosity ("
+                        + Utilities::to_string(adiabatic_temperature_gradient_for_viscosity) + ") and pressure ("
+                        + Utilities::to_string(pressure) + ")."));
 
           // Step 1a: compute viscosity from diffusion creep law
           const double viscosity_diffusion = diffusion_creep.compute_viscosity(pressure, temperature_for_viscosity, j);
@@ -188,6 +188,9 @@ namespace aspect
                 break;
               }
             }
+
+          // Step 1d: multiply the viscosity by a constant (default value is 1)
+          viscosity_pre_yield = constant_viscosity_prefactors.compute_viscosity(viscosity_pre_yield, j);
 
           // Step 2: calculate the viscous stress magnitude
           // and strain rate. If requested compute visco-elastic contributions.
@@ -455,10 +458,10 @@ namespace aspect
       EquationOfStateOutputs<dim> eos_outputs (this->n_compositional_fields()+1);
       EquationOfStateOutputs<dim> eos_outputs_all_phases (this->n_compositional_fields()+1+phase_function.n_phase_transitions());
 
-      std::vector<double> average_elastic_shear_moduli (in.temperature.size());
+      std::vector<double> average_elastic_shear_moduli (in.n_evaluation_points());
 
       // Loop through all requested points
-      for (unsigned int i=0; i < in.temperature.size(); ++i)
+      for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
         {
           // First compute the equation of state variables and thermodynamic properties
           equation_of_state.evaluate(in, i, eos_outputs_all_phases);
@@ -490,22 +493,32 @@ namespace aspect
           out.densities[i] = MaterialUtilities::average_value (volume_fractions, eos_outputs.densities, MaterialUtilities::arithmetic);
           out.thermal_expansion_coefficients[i] = MaterialUtilities::average_value (volume_fractions, eos_outputs.thermal_expansion_coefficients, MaterialUtilities::arithmetic);
           out.specific_heat[i] = MaterialUtilities::average_value (volume_fractions, eos_outputs.specific_heat_capacities, MaterialUtilities::arithmetic);
-          double thermal_diffusivity = 0.0;
 
-          for (unsigned int j=0; j < volume_fractions.size(); ++j)
-            thermal_diffusivity += volume_fractions[j] * thermal_diffusivities[j];
+          if (define_conductivities == false)
+            {
+              double thermal_diffusivity = 0.0;
 
-          // Thermal conductivity at the given positions. If the temperature equation uses
-          // the reference density profile formulation, use the reference density to
-          // calculate thermal conductivity. Otherwise, use the real density. If the adiabatic
-          // conditions are not yet initialized, the real density will still be used.
-          if (this->get_parameters().formulation_temperature_equation ==
-              Parameters<dim>::Formulation::TemperatureEquation::reference_density_profile &&
-              this->get_adiabatic_conditions().is_initialized())
-            out.thermal_conductivities[i] = thermal_diffusivity * out.specific_heat[i] *
-                                            this->get_adiabatic_conditions().density(in.position[i]);
+              for (unsigned int j=0; j < volume_fractions.size(); ++j)
+                thermal_diffusivity += volume_fractions[j] * thermal_diffusivities[j];
+
+              // Thermal conductivity at the given positions. If the temperature equation uses
+              // the reference density profile formulation, use the reference density to
+              // calculate thermal conductivity. Otherwise, use the real density. If the adiabatic
+              // conditions are not yet initialized, the real density will still be used.
+              if (this->get_parameters().formulation_temperature_equation ==
+                  Parameters<dim>::Formulation::TemperatureEquation::reference_density_profile &&
+                  this->get_adiabatic_conditions().is_initialized())
+                out.thermal_conductivities[i] = thermal_diffusivity * out.specific_heat[i] *
+                                                this->get_adiabatic_conditions().density(in.position[i]);
+              else
+                out.thermal_conductivities[i] = thermal_diffusivity * out.specific_heat[i] * out.densities[i];
+            }
           else
-            out.thermal_conductivities[i] = thermal_diffusivity * out.specific_heat[i] * out.densities[i];
+            {
+              // Use thermal conductivity values specified in the parameter file, if this
+              // option was selected.
+              out.thermal_conductivities[i] = MaterialUtilities::average_value (volume_fractions, thermal_conductivities, MaterialUtilities::arithmetic);
+            }
 
           out.compressibilities[i] = MaterialUtilities::average_value (volume_fractions, eos_outputs.compressibilities, MaterialUtilities::arithmetic);
           out.entropy_derivative_pressure[i] = MaterialUtilities::average_value (volume_fractions, eos_outputs.entropy_derivative_pressure, MaterialUtilities::arithmetic);
@@ -513,7 +526,7 @@ namespace aspect
 
           // Compute the effective viscosity if requested and retrieve whether the material is plastically yielding
           bool plastic_yielding = false;
-          if (in.strain_rate.size())
+          if (in.requests_property(MaterialProperties::viscosity))
             {
               // Currently, the viscosities for each of the compositional fields are calculated assuming
               // isostrain amongst all compositions, allowing calculation of the viscosity ratio.
@@ -616,17 +629,17 @@ namespace aspect
           Rheology::Elasticity<dim>::declare_parameters (prm);
 
           // Reference and minimum/maximum values
-          prm.declare_entry ("Reference temperature", "293", Patterns::Double(0),
+          prm.declare_entry ("Reference temperature", "293.", Patterns::Double (0.),
                              "For calculating density by thermal expansivity. Units: $\\si{K}$");
-          prm.declare_entry ("Minimum strain rate", "1.0e-20", Patterns::Double(0),
+          prm.declare_entry ("Minimum strain rate", "1.0e-20", Patterns::Double (0.),
                              "Stabilizes strain dependent viscosity. Units: $1 / s$");
-          prm.declare_entry ("Reference strain rate","1.0e-15",Patterns::Double(0),
+          prm.declare_entry ("Reference strain rate","1.0e-15",Patterns::Double (0.),
                              "Reference strain rate for first time step. Units: $1 / s$");
-          prm.declare_entry ("Minimum viscosity", "1e17", Patterns::Double(0),
+          prm.declare_entry ("Minimum viscosity", "1e17", Patterns::Double (0.),
                              "Lower cutoff for effective viscosity. Units: $Pa \\, s$");
-          prm.declare_entry ("Maximum viscosity", "1e28", Patterns::Double(0),
+          prm.declare_entry ("Maximum viscosity", "1e28", Patterns::Double (0.),
                              "Upper cutoff for effective viscosity. Units: $Pa \\, s$");
-          prm.declare_entry ("Reference viscosity", "1e22", Patterns::Double(0),
+          prm.declare_entry ("Reference viscosity", "1e22", Patterns::Double (0.),
                              "Reference viscosity for nondimensionalization. "
                              "To understand how pressure scaling works, take a look at "
                              "\\cite{KHB12}. In particular, the value of this parameter "
@@ -650,10 +663,20 @@ namespace aspect
 
           // Equation of state parameters
           prm.declare_entry ("Thermal diffusivities", "0.8e-6",
-                             Patterns::List(Patterns::Double(0)),
+                             Patterns::List(Patterns::Double (0.)),
                              "List of thermal diffusivities, for background material and compositional fields, "
                              "for a total of N+1 values, where N is the number of compositional fields. "
                              "If only one value is given, then all use the same value.  Units: $m^2/s$");
+          prm.declare_entry ("Define thermal conductivities","false",
+                             Patterns::Bool (),
+                             "Whether to directly define thermal conductivities for each compositional field "
+                             "instead of calculating the values through the specified thermal diffusivities, "
+                             "densities, and heat capacities. ");
+          prm.declare_entry ("Thermal conductivities", "3.0",
+                             Patterns::List(Patterns::Double(0)),
+                             "List of thermal conductivities, for background material and compositional fields, "
+                             "for a total of N+1 values, where N is the number of compositional fields. "
+                             "If only one value is given, then all use the same value.  Units: $W/(m K)$");
 
           // Rheological parameters
           prm.declare_entry ("Viscosity averaging scheme", "harmonic",
@@ -678,19 +701,22 @@ namespace aspect
           // Dislocation creep parameters
           Rheology::DislocationCreep<dim>::declare_parameters(prm);
 
+          // Constant viscosity prefactor parameters
+          Rheology::ConstantViscosityPrefactors<dim>::declare_parameters(prm);
+
           // Drucker Prager plasticity parameters
           Rheology::DruckerPrager<dim>::declare_parameters(prm);
 
           // Stress limiter parameters
           prm.declare_entry ("Stress limiter exponents", "1.0",
-                             Patterns::List(Patterns::Double(0)),
+                             Patterns::List(Patterns::Double (0.)),
                              "List of stress limiter exponents, $n_{\\text{lim}}$, "
                              "for background material and compositional fields, "
                              "for a total of N+1 values, where N is the number of compositional fields. "
                              "Units: none.");
 
           // Temperature in viscosity laws to include an adiabat (note units of K/Pa)
-          prm.declare_entry ("Adiabat temperature gradient for viscosity", "0.0", Patterns::Double(0),
+          prm.declare_entry ("Adiabat temperature gradient for viscosity", "0.0", Patterns::Double (0.),
                              "Add an adiabatic temperature gradient to the temperature used in the flow law "
                              "so that the activation volume is consistent with what one would use in a "
                              "earth-like (compressible) model. Default is set so this is off. "
@@ -761,6 +787,12 @@ namespace aspect
                                                                           n_fields,
                                                                           "Thermal diffusivities");
 
+          define_conductivities = prm.get_bool ("Define thermal conductivities");
+
+          thermal_conductivities = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Thermal conductivities"))),
+                                                                           n_fields,
+                                                                           "Thermal conductivities");
+
 
           viscosity_averaging = MaterialUtilities::parse_compositional_averaging_operation ("Viscosity averaging scheme",
                                 prm);
@@ -795,6 +827,10 @@ namespace aspect
           // Dislocation creep parameters
           dislocation_creep.initialize_simulator (this->get_simulator());
           dislocation_creep.parse_parameters(prm);
+
+          // Constant viscosity prefactor parameters
+          constant_viscosity_prefactors.initialize_simulator (this->get_simulator());
+          constant_viscosity_prefactors.parse_parameters(prm);
 
           // Plasticity parameters
           drucker_prager_parameters = drucker_prager_plasticity.parse_parameters(this->n_compositional_fields()+1,
@@ -833,7 +869,7 @@ namespace aspect
     {
       if (out.template get_additional_output<PlasticAdditionalOutputs<dim> >() == nullptr)
         {
-          const unsigned int n_points = out.viscosities.size();
+          const unsigned int n_points = out.n_evaluation_points();
           out.additional_outputs.push_back(
             std_cxx14::make_unique<MaterialModel::PlasticAdditionalOutputs<dim>> (n_points));
         }

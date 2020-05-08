@@ -23,6 +23,7 @@
 #include <aspect/utilities.h>
 #include <aspect/compat.h>
 #include <aspect/simulator_access.h>
+#include <aspect/citation_info.h>
 
 #include <aspect/simulator/assemblers/interface.h>
 #include <aspect/melt.h>
@@ -174,6 +175,7 @@ namespace aspect
     else if (parameters.formulation_mass_conservation ==
              Parameters<dim>::Formulation::MassConservation::projected_density_field)
       {
+        CitationInfo::add("pda");
         assemblers->stokes_system.push_back(
           std_cxx14::make_unique<aspect::Assemblers::StokesProjectedDensityFieldTerm<dim> >());
       }
@@ -459,7 +461,14 @@ namespace aspect
 #ifdef ASPECT_USE_PETSC
     Amg_data.symmetric_operator = false;
 #else
+#if DEAL_II_VERSION_GTE(9,2,0)
     Amg_data.constant_modes = constant_modes;
+#else
+    // To avoid a Trilinos error, only define constant modes
+    // if this mpi rank owns any DoFs:
+    if (dof_handler.n_locally_owned_dofs() != 0)
+      Amg_data.constant_modes = constant_modes;
+#endif
     Amg_data.elliptic = true;
     Amg_data.higher_order_elements = true;
 
@@ -811,6 +820,13 @@ namespace aspect
     system_matrix.compress(VectorOperation::add);
     system_rhs.compress(VectorOperation::add);
 
+    // If we change the system_rhs, matrix-free Stokes must update
+    if (stokes_matrix_free)
+      {
+        stokes_matrix_free->evaluate_material_model();
+        stokes_matrix_free->correct_stokes_rhs();
+      }
+
     // if the model is compressible then we need to adjust the right hand
     // side of the equation to make it compatible with the matrix on the
     // left
@@ -818,14 +834,6 @@ namespace aspect
       {
         pressure_shape_function_integrals.compress(VectorOperation::add);
         make_pressure_rhs_compatible(system_rhs);
-      }
-
-
-    // If we change the system_rhs, matrix-free Stokes must update
-    if (stokes_matrix_free)
-      {
-        stokes_matrix_free->evaluate_material_model();
-        stokes_matrix_free->correct_stokes_rhs();
       }
 
     // record that we have just rebuilt the matrix
@@ -837,14 +845,20 @@ namespace aspect
   template <int dim>
   void
   Simulator<dim>::build_advection_preconditioner(const AdvectionField &advection_field,
-                                                 LinearAlgebra::PreconditionILU &preconditioner)
+                                                 LinearAlgebra::PreconditionILU &preconditioner,
+                                                 const double diagonal_strengthening)
   {
     TimerOutput::Scope timer (computing_timer, (advection_field.is_temperature() ?
                                                 "Build temperature preconditioner" :
                                                 "Build composition preconditioner"));
 
     const unsigned int block_idx = advection_field.block_index(introspection);
-    preconditioner.initialize (system_matrix.block(block_idx, block_idx));
+
+
+    LinearAlgebra::PreconditionILU::AdditionalData data;
+    data.ilu_atol = diagonal_strengthening;
+
+    preconditioner.initialize (system_matrix.block(block_idx, block_idx), data);
   }
 
 
@@ -1258,7 +1272,8 @@ namespace aspect
                                                                      const internal::Assembly::CopyData::StokesSystem<dim> &data); \
   template void Simulator<dim>::assemble_stokes_system (); \
   template void Simulator<dim>::build_advection_preconditioner (const AdvectionField &, \
-                                                                aspect::LinearAlgebra::PreconditionILU &preconditioner); \
+                                                                aspect::LinearAlgebra::PreconditionILU &preconditioner, \
+                                                                const double diagonal_strengthening); \
   template void Simulator<dim>::local_assemble_advection_system ( \
                                                                   const AdvectionField          &advection_field, \
                                                                   const Vector<double>           &viscosity_per_cell, \

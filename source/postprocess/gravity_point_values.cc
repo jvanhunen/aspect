@@ -132,9 +132,8 @@ namespace aspect
 
       // Get quadrature formula and increase the degree of quadrature over the velocity
       // element degree.
-      const unsigned int degree = static_cast<unsigned int>(
-                                    this->get_fe().base_element(this->introspection().base_elements.velocities).degree
-                                    + quadrature_degree_increase);
+      const unsigned int degree = this->get_fe().base_element(this->introspection().base_elements.velocities).degree
+                                  + quadrature_degree_increase;
       const QGauss<dim> quadrature_formula (degree);
       FEValues<dim> fe_values (this->get_mapping(),
                                this->get_fe(),
@@ -409,13 +408,14 @@ namespace aspect
                      << position_satellite[0] << ' '
                      << position_satellite[1] << ' '
                      << position_satellite[2] << ' '
-                     << std::setprecision(18) << g << ' '
-                     << std::setprecision(18) << g.norm() << ' '
-                     << std::setprecision(18) << g_theory << ' '
-                     << std::setprecision(9) << g_potential << ' '
-                     << std::setprecision(9) << g_potential_theory << ' '
-                     << std::setprecision(9) << g_anomaly << ' '
-                     << std::setprecision(9) << g_anomaly.norm() << ' '
+                     << std::setprecision(precision)
+                     << g << ' '
+                     << g.norm() << ' '
+                     << g_theory << ' '
+                     << g_potential << ' '
+                     << g_potential_theory << ' '
+                     << g_anomaly << ' '
+                     << g_anomaly.norm() << ' '
                      << g_gradient[0][0] *1e9 << ' '
                      << g_gradient[1][1] *1e9 << ' '
                      << g_gradient[2][2] *1e9 << ' '
@@ -435,32 +435,32 @@ namespace aspect
       // write quantities in the statistic file
       const std::string name2("Average gravity acceleration (m/s^2)");
       statistics.add_value (name2, sum_g/n_satellites);
-      statistics.set_precision (name2, 12);
+      statistics.set_precision (name2, precision);
       statistics.set_scientific (name2, true);
 
       const std::string name3("Minimum gravity acceleration (m/s^2)");
       statistics.add_value (name3, min_g);
-      statistics.set_precision (name3, 12);
+      statistics.set_precision (name3, precision);
       statistics.set_scientific (name3, true);
 
       const std::string name4("Maximum gravity acceleration (m/s^2)");
       statistics.add_value (name4, max_g);
-      statistics.set_precision (name4, 12);
+      statistics.set_precision (name4, precision);
       statistics.set_scientific (name4, true);
 
       const std::string name5("Average gravity potential (m^2/s^2)");
       statistics.add_value (name5, sum_g_potential/n_satellites);
-      statistics.set_precision (name5, 12);
+      statistics.set_precision (name5, precision);
       statistics.set_scientific (name5, true);
 
       const std::string name6("Minimum gravity potential (m^2/s^2)");
       statistics.add_value (name6, min_g_potential);
-      statistics.set_precision (name6, 12);
+      statistics.set_precision (name6, precision);
       statistics.set_scientific (name6, true);
 
       const std::string name7("Maximum gravity potential (m^2/s^2)");
       statistics.add_value (name7, max_g_potential);
-      statistics.set_precision (name7, 12);
+      statistics.set_precision (name7, precision);
       statistics.set_scientific (name7, true);
 
       // up the next time we need output:
@@ -487,7 +487,7 @@ namespace aspect
                              "list of points contains specific coordinates of the "
                              "satellites.");
           prm.declare_entry ("Quadrature degree increase", "0",
-                             Patterns::Double (0.0),
+                             Patterns::Integer (0),
                              "Quadrature degree increase over the velocity element "
                              "degree may be required when gravity is calculated near "
                              "the surface or inside the model. An increase in the "
@@ -511,53 +511,57 @@ namespace aspect
                              "This specifies the number of points along "
                              "the latitude (e.g. gravity map) between a minimum and "
                              "maximum latitude.");
-          prm.declare_entry ("Minimum radius", "0",
+          prm.declare_entry ("Minimum radius", "0.",
                              Patterns::Double (0.0),
                              "Parameter for the uniform distribution sampling scheme: "
                              "Minimum radius may be defined in or outside the model. "
                              "Prescribe a minimum radius for a sampling coverage at a "
                              "specific height.");
-          prm.declare_entry ("Maximum radius", "0",
+          prm.declare_entry ("Maximum radius", "0.",
                              Patterns::Double (0.0),
                              "Parameter for the uniform distribution sampling scheme: "
                              "Maximum radius can be defined in or outside the model.");
-          prm.declare_entry ("Minimum longitude", "-180",
-                             Patterns::Double (-180.0,180.0),
+          prm.declare_entry ("Minimum longitude", "-180.",
+                             Patterns::Double (-180.0, 180.0),
                              "Parameter for the uniform distribution sampling scheme: "
                              "Gravity may be calculated for a sets of points along "
                              "the longitude between a minimum and maximum longitude.");
-          prm.declare_entry ("Minimum latitude", "-90",
-                             Patterns::Double (-90.0,90.0),
+          prm.declare_entry ("Minimum latitude", "-90.",
+                             Patterns::Double (-90.0, 90.0),
                              "Parameter for the uniform distribution sampling scheme: "
                              "Gravity may be calculated for a sets of points along "
                              "the latitude between a minimum and maximum latitude.");
-          prm.declare_entry ("Maximum longitude", "180",
-                             Patterns::Double (-180.0,180.0),
+          prm.declare_entry ("Maximum longitude", "180.",
+                             Patterns::Double (-180.0, 180.0),
                              "Parameter for the uniform distribution sampling scheme: "
                              "Gravity may be calculated for a sets of points along "
                              "the longitude between a minimum and maximum longitude.");
           prm.declare_entry ("Maximum latitude", "90",
-                             Patterns::Double (-90.0,90.0),
+                             Patterns::Double (-90.0, 90.0),
                              "Parameter for the uniform distribution sampling scheme: "
                              "Gravity may be calculated for a sets of points along "
                              "the latitude between a minimum and maximum latitude.");
-          prm.declare_entry ("Reference density", "3300",
+          prm.declare_entry ("Reference density", "3300.",
                              Patterns::Double (0.0),
                              "Gravity anomalies may be computed using density "
                              "anomalies relative to a reference density.");
+          prm.declare_entry ("Precision in gravity output", "12",
+                             Patterns::Integer (1),
+                             "Set the precision of gravity acceleration, potential "
+                             "and gradients in the gravity output and statistics file.");
           prm.declare_entry ("List of radius", "",
-                             Patterns::List (Patterns::Double(0)),
+                             Patterns::List (Patterns::Double (0.)),
                              "Parameter for the list of points sampling scheme: "
                              "List of satellite radius coordinates. Just specify one "
                              "radius if all points values have the same radius. If "
                              "not, make sure there are as many radius as longitude "
                              "and latitude");
           prm.declare_entry ("List of longitude", "",
-                             Patterns::List (Patterns::Double(-180.0,180.0)),
+                             Patterns::List (Patterns::Double(-180.0, 180.0)),
                              "Parameter for the list of points sampling scheme: "
                              "List of satellite longitude coordinates.");
           prm.declare_entry ("List of latitude", "",
-                             Patterns::List (Patterns::Double(-90.0,90.0)),
+                             Patterns::List (Patterns::Double(-90.0, 90.0)),
                              "Parameter for the list of points sampling scheme: "
                              "List of satellite latitude coordinates.");
           prm.declare_entry ("Time between gravity output", "1e8",
@@ -604,17 +608,18 @@ namespace aspect
             sampling_scheme = list_of_points;
           else
             AssertThrow (false, ExcMessage ("Not a valid sampling scheme."));
-          quadrature_degree_increase = prm.get_double ("Quadrature degree increase");
+          quadrature_degree_increase = prm.get_integer ("Quadrature degree increase");
           n_points_radius     = prm.get_integer("Number points radius");
           n_points_longitude  = prm.get_integer("Number points longitude");
           n_points_latitude   = prm.get_integer("Number points latitude");
           minimum_radius      = prm.get_double ("Minimum radius");
           maximum_radius      = prm.get_double ("Maximum radius");
-          minimum_colongitude = prm.get_double ("Minimum longitude") + 180;
-          maximum_colongitude = prm.get_double ("Maximum longitude") + 180;
-          minimum_colatitude  = prm.get_double ("Minimum latitude") + 90;
-          maximum_colatitude  = prm.get_double ("Maximum latitude") + 90;
+          minimum_colongitude = prm.get_double ("Minimum longitude") + 180.;
+          maximum_colongitude = prm.get_double ("Maximum longitude") + 180.;
+          minimum_colatitude  = prm.get_double ("Minimum latitude") + 90.;
+          maximum_colatitude  = prm.get_double ("Maximum latitude") + 90.;
           reference_density   = prm.get_double ("Reference density");
+          precision = prm.get_integer ("Precision in gravity output");
           radius_list    = Utilities::string_to_double(Utilities::split_string_list(prm.get("List of radius")));
           longitude_list = Utilities::string_to_double(Utilities::split_string_list(prm.get("List of longitude")));
           latitude_list  = Utilities::string_to_double(Utilities::split_string_list(prm.get("List of latitude")));

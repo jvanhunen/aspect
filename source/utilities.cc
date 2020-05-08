@@ -1059,7 +1059,8 @@ namespace aspect
 #else // HAVE_LIBDAP
 
               // broadcast failure state, then throw
-              MPI_Bcast(&filesize, 1, MPI_UNSIGNED, 0, comm);
+              const int ierr = MPI_Bcast(&filesize, 1, MPI_UNSIGNED, 0, comm);
+              AssertThrowMPI(ierr);
               AssertThrow(false,
                           ExcMessage(std::string("Reading of file ") + filename + " failed. " +
                                      "Make sure you have the dependencies for reading a url " +
@@ -1074,7 +1075,8 @@ namespace aspect
               if (!filestream)
                 {
                   // broadcast failure state, then throw
-                  MPI_Bcast(&filesize,1,MPI_UNSIGNED,0,comm);
+                  const int ierr = MPI_Bcast(&filesize,1,MPI_UNSIGNED,0,comm);
+                  AssertThrowMPI(ierr);
                   AssertThrow (false,
                                ExcMessage (std::string("Could not open file <") + filename + ">."));
                   return data_string; // never reached
@@ -1088,7 +1090,8 @@ namespace aspect
               if (!filestream.eof())
                 {
                   // broadcast failure state, then throw
-                  MPI_Bcast(&filesize,1,MPI_UNSIGNED,0,comm);
+                  const int ierr = MPI_Bcast(&filesize,1,MPI_UNSIGNED,0,comm);
+                  AssertThrowMPI(ierr);
                   AssertThrow (false,
                                ExcMessage (std::string("Reading of file ") + filename + " finished " +
                                            "before the end of file was reached. Is the file corrupted or"
@@ -1101,21 +1104,25 @@ namespace aspect
             }
 
           // Distribute data_size and data across processes
-          MPI_Bcast(&filesize,1,MPI_UNSIGNED,0,comm);
-          MPI_Bcast(&data_string[0],filesize,MPI_CHAR,0,comm);
+          int ierr = MPI_Bcast(&filesize,1,MPI_UNSIGNED,0,comm);
+          AssertThrowMPI(ierr);
+          ierr = MPI_Bcast(&data_string[0],filesize,MPI_CHAR,0,comm);
+          AssertThrowMPI(ierr);
         }
       else
         {
           // Prepare for receiving data
           unsigned int filesize;
-          MPI_Bcast(&filesize,1,MPI_UNSIGNED,0,comm);
+          int ierr = MPI_Bcast(&filesize,1,MPI_UNSIGNED,0,comm);
+          AssertThrowMPI(ierr);
           if (filesize == numbers::invalid_unsigned_int)
             throw QuietException();
 
           data_string.resize(filesize);
 
           // Receive and store data
-          MPI_Bcast(&data_string[0],filesize,MPI_CHAR,0,comm);
+          ierr = MPI_Bcast(&data_string[0],filesize,MPI_CHAR,0,comm);
+          AssertThrowMPI(ierr);
         }
 
       return data_string;
@@ -1181,7 +1188,8 @@ namespace aspect
               error = closedir(output_directory);
             }
           // Broadcast error code
-          MPI_Bcast (&error, 1, MPI_INT, 0, comm);
+          const int ierr = MPI_Bcast (&error, 1, MPI_INT, 0, comm);
+          AssertThrowMPI(ierr);
           AssertThrow (error == 0,
                        ExcMessage (std::string("Can't create the output directory at <") + pathname + ">"));
         }
@@ -1189,7 +1197,8 @@ namespace aspect
         {
           // Wait to receive error code, and throw QuietException if directory
           // creation has failed
-          MPI_Bcast (&error, 1, MPI_INT, 0, comm);
+          const int ierr = MPI_Bcast (&error, 1, MPI_INT, 0, comm);
+          AssertThrowMPI(ierr);
           if (error!=0)
             throw aspect::QuietException();
         }
@@ -2005,7 +2014,7 @@ namespace aspect
                            "the boundary of the model according to the names of the boundary "
                            "indicators (of the chosen geometry model).\\%d is any sprintf integer "
                            "qualifier, specifying the format of the current file number. ");
-        prm.declare_entry ("Scale factor", "1",
+        prm.declare_entry ("Scale factor", "1.",
                            Patterns::Double (),
                            "Scalar factor, which is applied to the model data. "
                            "You might want to use this to scale the input to a "
@@ -2485,13 +2494,13 @@ namespace aspect
       prm.enter_subsection (subsection_name);
       {
         prm.declare_entry ("Data file time step", "1e6",
-                           Patterns::Double (0),
+                           Patterns::Double (0.),
                            "Time step between following data files. "
                            "Depending on the setting of the global `Use years in output instead of seconds' flag "
                            "in the input file, this number is either interpreted as seconds or as years. "
                            "The default is one million, i.e., either one million seconds or one million years.");
         prm.declare_entry ("First data file model time", "0",
-                           Patterns::Double (0),
+                           Patterns::Double (0.),
                            "Time from which on the data file with number `First data "
                            "file number' is used as boundary condition. Until this "
                            "time, a boundary condition equal to zero everywhere is assumed. "
