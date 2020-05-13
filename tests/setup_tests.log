@@ -1,0 +1,9 @@
+-- Setting up tests with CMAKE_BUILD_TYPE Debug
+-- ** processing test quick_mpi:
+-- Setting up plugin:
+--   name <quick_mpi>
+--   using ASPECT_DIR /ddn/data/dgl6jv1/Progs/git/aspect
+--   in Debug mode
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /ddn/data/dgl6jv1/Progs/git/aspect/tests

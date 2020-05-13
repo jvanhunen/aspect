@@ -26,6 +26,7 @@
 #include <aspect/simulator_access.h>
 #include <aspect/material_model/rheology/diffusion_creep.h>
 #include <aspect/material_model/rheology/dislocation_creep.h>
+#include <aspect/material_model/rheology/depletion_strengthening.h>
 #include <aspect/material_model/rheology/constant_viscosity_prefactors.h>
 #include <aspect/material_model/rheology/drucker_prager.h>
 #include <aspect/material_model/equation_of_state/multicomponent_incompressible.h>
@@ -364,6 +365,7 @@ namespace aspect
          */
         Rheology::DiffusionCreep<dim> diffusion_creep;
         Rheology::DislocationCreep<dim> dislocation_creep;
+        Rheology::DepletionStrengthening<dim> depletion_strengthening;
 
         /**
          * Object for computing the viscosity multiplied by a constant prefactor.
@@ -396,6 +398,13 @@ namespace aspect
          * Whether to include viscoelasticity in the constitutive formulation.
          */
         bool use_elasticity;
+
+        /**
+         * depletion strengthening parameters
+         */
+        double alpha_depletion;
+        double delta_eta_depletion_max;
+
     };
 
   }

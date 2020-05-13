@@ -1,0 +1,35 @@
+        /** 
+        * Parameters for anhydrous melting of peridotite after Katz, 2003
+        */
+             // for the solidus temperature
+        double A1;   // °C
+        double A2; // °C/Pa
+        double A3; // °C/(Pa^2)
+             // for the lherzolite liquidus temperature
+        double B1;   // °C
+        double B2;   // °C/Pa
+        double B3; // °C/(Pa^2)
+                // for the liquidus temperature
+        double C1;   // °C
+        double C2;  // °C/Pa
+        double C3; // °C/(Pa^2)
+            // for the reaction coefficient of pyroxene
+        double r1;     // cpx/melt
+        double r2;     // cpx/melt/GPa
+        double M_cpx;  // mass fraction of pyroxene
+            // melt fraction exponent
+        double beta;
+            // depletion strengthening parameters
+        double alpha_depletion;
+        double delta_eta_depletion_max;
+
+        // entropy change upon melting
+//        double peridotite_melting_entropy_change;
+
+        virtual
+        double
+        melt_fraction (const double temperature,
+                       const double pressure,
+                       const std::vector<double> &compositional_fields,
+                       const Point<dim> &position) const;
+    };
