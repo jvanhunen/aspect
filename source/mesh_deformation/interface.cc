@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -348,15 +348,18 @@ namespace aspect
       for (periodic_boundary_pairs::iterator p = pbp.begin(); p != pbp.end(); ++p)
         DoFTools::make_periodicity_constraints(mesh_deformation_dof_handler, (*p).first.first, (*p).first.second, (*p).second, mesh_velocity_constraints);
 
-      // Zero out the displacement for the zero-velocity boundary indicators
-      // that are not mesh deformation boundary indicators
+      // Zero out the displacement for the zero-velocity boundaries
+      // if the boundary is not in the set of tangential mesh boundaries and not in the set of mesh deformation boundary indicators
       for (std::set<types::boundary_id>::const_iterator p = sim.boundary_velocity_manager.get_zero_boundary_velocity_indicators().begin();
            p != sim.boundary_velocity_manager.get_zero_boundary_velocity_indicators().end(); ++p)
-        if (mesh_deformation_boundary_indicators_set.find(*p) == mesh_deformation_boundary_indicators_set.end())
+        if (tangential_mesh_boundary_indicators.find(*p) == tangential_mesh_boundary_indicators.end())
           {
-            VectorTools::interpolate_boundary_values (*sim.mapping,
-                                                      mesh_deformation_dof_handler, *p,
-                                                      ZeroFunction<dim>(dim), mesh_velocity_constraints);
+            if (mesh_deformation_boundary_indicators_set.find(*p) == mesh_deformation_boundary_indicators_set.end())
+              {
+                VectorTools::interpolate_boundary_values (*sim.mapping,
+                                                          mesh_deformation_dof_handler, *p,
+                                                          Functions::ZeroFunction<dim>(dim), mesh_velocity_constraints);
+              }
           }
 
       // Zero out the displacement for the prescribed velocity boundaries
@@ -370,7 +373,7 @@ namespace aspect
                 {
                   VectorTools::interpolate_boundary_values (*sim.mapping,
                                                             mesh_deformation_dof_handler, p->first,
-                                                            ZeroFunction<dim>(dim), mesh_velocity_constraints);
+                                                            Functions::ZeroFunction<dim>(dim), mesh_velocity_constraints);
                 }
             }
         }

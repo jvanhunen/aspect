@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -294,11 +294,17 @@ namespace aspect
 
             if (check_structure)
               {
-                AssertThrow((*n_values_per_key)[field_index] == n_values,
+                AssertThrow(((*n_values_per_key)[field_index] == n_values || n_values == 1),
                             ExcMessage("The key <" + field_names[field_index] + "> in <"+ property_name + "> does not have "
                                        + "the expected number of values. It expects " + std::to_string((*n_values_per_key)[field_index])
-                                       + " values, but we found " + std::to_string(n_values) + " values."));
-
+                                       + "or 1 values, but we found " + std::to_string(n_values) + " values."));
+                if (n_values == 1)
+                  {
+                    const std::string field_name = field_names[field_index];
+                    const double field_value = parsed_map.find(field_name)->second;
+                    for (unsigned int i=1; i<(*n_values_per_key)[field_index]; ++i)
+                      parsed_map.emplace(field_name, field_value);
+                  }
               }
 
             ++field_index;
@@ -316,7 +322,6 @@ namespace aspect
           for (auto entry = entry_range.first; entry != entry_range.second; ++entry)
             return_values.push_back(entry->second);
         }
-
       return return_values;
     }
 
@@ -1962,7 +1967,7 @@ namespace aspect
     AsciiDataLookup<dim>::get_gradients(const Point<dim> &position,
                                         const unsigned int component)
     {
-      return data[component]->gradient(position,component);
+      return data[component]->gradient(position,0);
     }
 
 
@@ -3410,6 +3415,78 @@ namespace aspect
     }
 
 
+    template <int dim, typename VectorType>
+    void
+    project_cellwise(const Mapping<dim>                                        &mapping,
+                     const DoFHandler<dim>                                     &dof_handler,
+                     const unsigned int                                         component_index,
+                     const Quadrature<dim>                                     &quadrature,
+                     const std::function<void(
+                       const typename DoFHandler<dim>::active_cell_iterator &,
+                       const std::vector<Point<dim> > &,
+                       std::vector<double> &)>                                 &function,
+                     VectorType                                                &vec_result)
+    {
+      const FEValuesExtractors::Scalar extractor(component_index);
+
+      UpdateFlags update_flags = UpdateFlags(update_values   |
+                                             update_quadrature_points |
+                                             update_JxW_values);
+
+      FEValues<dim> fe_values (mapping, dof_handler.get_fe(), quadrature, update_flags);
+
+      const unsigned int
+      dofs_per_cell = fe_values.dofs_per_cell,
+      n_q_points    = fe_values.n_quadrature_points;
+
+      std::vector<types::global_dof_index> local_dof_indices (dofs_per_cell);
+      Vector<double> cell_vector (dofs_per_cell);
+      Vector<double> local_projection (dofs_per_cell);
+      FullMatrix<double> local_mass_matrix (dofs_per_cell, dofs_per_cell);
+
+      std::vector<double> rhs_values(n_q_points);
+
+      for (const auto &cell : dof_handler.active_cell_iterators())
+        if (cell->is_locally_owned())
+          {
+            // For each cell, create a local mass matrix and rhs.
+            cell->get_dof_indices (local_dof_indices);
+            fe_values.reinit(cell);
+
+            function(cell, fe_values.get_quadrature_points(), rhs_values);
+
+            cell_vector = 0;
+            local_mass_matrix = 0;
+            for (unsigned int point=0; point<n_q_points; ++point)
+              for (unsigned int i=0; i<dofs_per_cell; ++i)
+                {
+                  if (dof_handler.get_fe().system_to_component_index(i).first == component_index)
+                    cell_vector(i) +=
+                      rhs_values[point] *
+                      fe_values[extractor].value(i,point) *
+                      fe_values.JxW(point);
+
+                  for (unsigned int j=0; j<dofs_per_cell; ++j)
+                    if ((dof_handler.get_fe().system_to_component_index(i).first ==
+                         component_index)
+                        &&
+                        (dof_handler.get_fe().system_to_component_index(j).first ==
+                         component_index))
+                      local_mass_matrix(j,i) += (fe_values[extractor].value(i,point) * fe_values[extractor].value(j,point) *
+                                                 fe_values.JxW(point));
+                    else if (i == j)
+                      local_mass_matrix(i,j) = 1.;
+                }
+
+            // now invert the local mass matrix and multiply it with the rhs
+            local_mass_matrix.gauss_jordan();
+            local_mass_matrix.vmult (local_projection, cell_vector);
+
+            // then set the global solution vector to the values just computed
+            cell->set_dof_values (local_projection, vec_result);
+          }
+    }
+
 // Explicit instantiations
 
 #define INSTANTIATE(dim) \
@@ -3512,5 +3589,50 @@ namespace aspect
                                                const unsigned int n_rows,
                                                const unsigned int n_columns,
                                                const std::string &property_name);
+
+    template
+    void
+    project_cellwise(const Mapping<2> &mapping,
+                     const DoFHandler<2> &dof_handler,
+                     const unsigned int component_index,
+                     const Quadrature<2> &quadrature,
+                     const std::function<void(
+                       const typename DoFHandler<2>::active_cell_iterator &,
+                       const std::vector<Point<2> > &,
+                       std::vector<double> &)> &function,
+                     dealii::LinearAlgebra::distributed::Vector<double> &vec_result);
+    template
+    void
+    project_cellwise(const Mapping<3> &mapping,
+                     const DoFHandler<3> &dof_handler,
+                     const unsigned int component_index,
+                     const Quadrature<3> &quadrature,
+                     const std::function<void(
+                       const typename DoFHandler<3>::active_cell_iterator &,
+                       const std::vector<Point<3> > &,
+                       std::vector<double> &)> &function,
+                     dealii::LinearAlgebra::distributed::Vector<double> &vec_result);
+    template
+    void
+    project_cellwise(const Mapping<2> &mapping,
+                     const DoFHandler<2> &dof_handler,
+                     const unsigned int component_index,
+                     const Quadrature<2> &quadrature,
+                     const std::function<void(
+                       const typename DoFHandler<2>::active_cell_iterator &,
+                       const std::vector<Point<2> > &,
+                       std::vector<double> &)> &function,
+                     LinearAlgebra::BlockVector &vec_result);
+    template
+    void
+    project_cellwise(const Mapping<3> &mapping,
+                     const DoFHandler<3> &dof_handler,
+                     const unsigned int component_index,
+                     const Quadrature<3> &quadrature,
+                     const std::function<void(
+                       const typename DoFHandler<3>::active_cell_iterator &,
+                       const std::vector<Point<3> > &,
+                       std::vector<double> &)> &function,
+                     LinearAlgebra::BlockVector &vec_result);
   }
 }

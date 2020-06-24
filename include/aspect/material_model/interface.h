@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -680,7 +680,8 @@ namespace aspect
        * quadrature point to \f[ \bar x = {10}^{\frac 1Q \sum_{q=1}^Q \log_{10} x_q} \f]
        * where $x_q$ are the values at the $Q$ quadrature points.
        *
-       * - Harmonic average viscosity only: Like harmonic averaging, but only
+       * - Harmonic average only viscosity and project to Q1 only viscosity: Like
+       * harmonic averaging and project to Q1, but only
        * applied to the viscosity.
        */
       enum AveragingOperation
@@ -692,7 +693,8 @@ namespace aspect
         pick_largest,
         project_to_Q1,
         log_average,
-        harmonic_average_only_viscosity
+        harmonic_average_only_viscosity,
+        project_to_Q1_only_viscosity
       };
 
 

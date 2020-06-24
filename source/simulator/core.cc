@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -1328,7 +1328,7 @@ namespace aspect
         VectorTools::interpolate_boundary_values (*mapping,
                                                   dof_handler,
                                                   *p,
-                                                  ZeroFunction<dim>(introspection.n_components),
+                                                  Functions::ZeroFunction<dim>(introspection.n_components),
                                                   constraints,
                                                   introspection.component_masks.velocities);
 
@@ -1410,7 +1410,7 @@ namespace aspect
             VectorTools::interpolate_boundary_values (*mapping,
                                                       dof_handler,
                                                       p->first,
-                                                      ZeroFunction<dim>(introspection.n_components),
+                                                      Functions::ZeroFunction<dim>(introspection.n_components),
                                                       constraints,
                                                       mask);
           }

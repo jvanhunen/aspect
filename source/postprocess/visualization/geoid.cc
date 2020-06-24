@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2016 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2016 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -23,6 +23,7 @@
 #include <aspect/utilities.h>
 #include <aspect/geometry_model/spherical_shell.h>
 #include <aspect/postprocess/visualization/geoid.h>
+#include <aspect/citation_info.h>
 
 
 
@@ -39,6 +40,14 @@ namespace aspect
         DataPostprocessorScalar<dim> ("geoid",
                                       update_quadrature_points)
       {}
+
+      template <int dim>
+      void
+      Geoid<dim>::
+      initialize()
+      {
+        CitationInfo::add("geoid");
+      }
 
       template <int dim>
       void
