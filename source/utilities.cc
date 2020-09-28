@@ -21,7 +21,7 @@
 #include <aspect/utilities.h>
 #include <aspect/simulator_access.h>
 
-#ifdef HAVE_LIBDAP
+#ifdef ASPECT_WITH_LIBDAP
 #include <D4Connect.h>
 #include <Connect.h>
 #include <Response.h>
@@ -209,7 +209,7 @@ namespace aspect
                                const bool expects_background_field,
                                const std::string &property_name,
                                const bool allow_multiple_values_per_key,
-                               std::shared_ptr<std::vector<unsigned int> > n_values_per_key,
+                               const std::shared_ptr<std::vector<unsigned int> > &n_values_per_key,
                                const bool allow_missing_keys)
     {
       std::vector<std::string> field_names = list_of_keys;
@@ -970,7 +970,7 @@ namespace aspect
           // from a provided URL
           if (filename_is_url(filename))
             {
-#ifdef HAVE_LIBDAP
+#ifdef ASPECT_WITH_LIBDAP
               libdap::Connect *url = new libdap::Connect(filename);
               libdap::BaseTypeFactory factory;
               libdap::DataDDS dds(&factory);
@@ -1061,7 +1061,7 @@ namespace aspect
               filesize = data_string.size();
 
               delete url;
-#else // HAVE_LIBDAP
+#else // ASPECT_WITH_LIBDAP
 
               // broadcast failure state, then throw
               const int ierr = MPI_Bcast(&filesize, 1, MPI_UNSIGNED, 0, comm);
@@ -1071,7 +1071,7 @@ namespace aspect
                                      "Make sure you have the dependencies for reading a url " +
                                      "(run cmake with -DASPECT_WITH_LIBDAP=ON)"));
 
-#endif // HAVE_LIBDAP
+#endif // ASPECT_WITH_LIBDAP
             }
           else
             {
@@ -1724,11 +1724,108 @@ namespace aspect
       return maximum_component_value[component];
     }
 
+
+
+    template <int dim>
+    void
+    AsciiDataLookup<dim>::reinit(const std::vector<std::string> &column_names,
+                                 const std::vector<std::vector<double>> &coordinate_values_,
+                                 const std::vector<Table<dim,double> > &raw_data)
+    {
+      Assert(coordinate_values_.size()==dim, ExcMessage("Invalid size of coordinate_values."));
+      for (unsigned int d=0; d<dim; ++d)
+        {
+          coordinate_values[d] = coordinate_values_[d];
+          AssertThrow(coordinate_values[d].size()>1,
+                      ExcMessage("Error: At least 2 entries per coordinate direction are required."));
+          table_points[d] = coordinate_values_[d].size();
+        }
+
+      components = column_names.size();
+      data_component_names = column_names;
+      Assert(raw_data.size() == components,
+             ExcMessage("Error: Incorrect number of columns specified."));
+
+      // compute maximum_component_value for each component:
+      maximum_component_value = std::vector<double>(components,-std::numeric_limits<double>::max());
+      for (unsigned int c=0; c<components; ++c)
+        {
+          Assert(raw_data[c].size() == table_points,
+                 ExcMessage("Error: One of the data tables has an incorrect size."));
+
+          const unsigned int n_elements = raw_data[c].n_elements();
+          for (unsigned int idx=0; idx<n_elements; ++idx)
+            maximum_component_value[c] = std::max(maximum_component_value[c], raw_data[c](
+                                                    compute_table_indices(table_points, idx)));
+        }
+
+      // In case the data is specified on a grid that is equidistant
+      // in each coordinate direction, we only need to store
+      // (besides the data) the number of intervals in each direction and
+      // the begin- and endpoints of the coordinates.
+      // In case the grid is not equidistant, we need to keep
+      // all the coordinates in each direction, which is more costly.
+      std::array<unsigned int,dim> table_intervals;
+
+      coordinate_values_are_equidistant = true;
+      for (unsigned int d=0; d<dim; ++d)
+        {
+          table_intervals[d] = table_points[d]-1;
+
+          // The minimum and maximum coordinate values:
+          grid_extent[d].first = coordinate_values[d][0];
+          grid_extent[d].second = coordinate_values[d][table_points[d]-1];
+
+          const double grid_spacing = coordinate_values[d][1] - coordinate_values[d][0];
+
+          for (unsigned int n = 1; n < table_points[d]; ++n)
+            {
+              const double current_grid_spacing = coordinate_values[d][n] - coordinate_values_[d][n-1];
+
+              AssertThrow(current_grid_spacing > 0.0,
+                          ExcMessage ("Coordinates in dimension "
+                                      + Utilities::int_to_string(d)
+                                      + " are not strictly ascending."));
+
+              // If spacing between coordinates changed (with a relative
+              // tolerance), keep track of that information.  Note that we do
+              // not break out of this loop in this case but run through the
+              // whole array, so that the AssertThrow above is executed for
+              // each entry to ensure increasing coordinate values.
+              if (std::abs(current_grid_spacing - grid_spacing) > 0.005*(current_grid_spacing+grid_spacing))
+                coordinate_values_are_equidistant = false;
+            }
+        }
+
+      // For each data component, set up a GridData,
+      // its type depending on the read-in grid.
+      data.resize(components);
+      for (unsigned int c = 0; c < components; ++c)
+        {
+          if (coordinate_values_are_equidistant)
+            data[c]
+              = std_cxx14::make_unique<Functions::InterpolatedUniformGridData<dim>> (grid_extent,
+                                                                                     table_intervals,
+                                                                                     raw_data[c]);
+          else
+            data[c]
+              = std_cxx14::make_unique<Functions::InterpolatedTensorProductGridData<dim>> (coordinate_values,
+                                                                                           raw_data[c]);
+        }
+    }
+
+
+
     template <int dim>
     void
     AsciiDataLookup<dim>::load_file(const std::string &filename,
                                     const MPI_Comm &comm)
     {
+      // Grab the values already stored in this class (if they exist), this way we can
+      // check if somebody changes the size of the table over time and error out (see below)
+      TableIndices<dim> new_table_points = this->table_points;
+      std::vector<std::string> column_names;
+
       // Read data from disk and distribute among processes
       std::stringstream in(read_and_distribute_file_content(filename, comm));
 
@@ -1746,10 +1843,10 @@ namespace aspect
                   unsigned int temp_index;
                   linestream >> temp_index;
 
-                  if (table_points[i] == 0)
-                    table_points[i] = temp_index;
+                  if (new_table_points[i] == 0)
+                    new_table_points[i] = temp_index;
                   else
-                    AssertThrow (table_points[i] == temp_index,
+                    AssertThrow (new_table_points[i] == temp_index,
                                  ExcMessage("The file grid must not change over model runtime. "
                                             "Either you prescribed a conflicting number of points in "
                                             "the input file, or the POINTS comment in your data files "
@@ -1759,7 +1856,7 @@ namespace aspect
 
       for (unsigned int i = 0; i < dim; i++)
         {
-          AssertThrow(table_points[i] != 0,
+          AssertThrow(new_table_points[i] != 0,
                       ExcMessage("Could not successfully read in the file header of the "
                                  "ascii data file <" + filename + ">. One header line has to "
                                  "be of the format: '#POINTS: N1 [N2] [N3]', where N1 and "
@@ -1812,43 +1909,68 @@ namespace aspect
                   // Note: only ASCII characters allowed
                   std::transform(column_name_or_data.begin(), column_name_or_data.end(), column_name_or_data.begin(), ::tolower);
 
-                  AssertThrow(std::find(data_component_names.begin(),data_component_names.end(),column_name_or_data)
-                              == data_component_names.end(),
+                  AssertThrow(std::find(column_names.begin(),column_names.end(),column_name_or_data)
+                              == column_names.end(),
                               ExcMessage("There are multiple fields named " + column_name_or_data +
                                          " in the data file " + filename + ". Please remove duplication to "
                                          "allow for unique association between column and name."));
 
-                  data_component_names.push_back(column_name_or_data);
+                  column_names.push_back(column_name_or_data);
                 }
               ++name_column_index;
             }
         }
 
-      /**
-       * Create table for the data. This peculiar reinit is necessary, because
-       * there is no constructor for Table, which takes TableIndices as
-       * argument.
-       */
-      data.resize(components);
-      maximum_component_value.resize(components,-std::numeric_limits<double>::max());
+      // Create table for the data. This peculiar reinit is necessary, because
+      // there is no constructor for Table, which takes TableIndices as
+      // argument.
       Table<dim,double> data_table;
-      data_table.TableBase<dim,double>::reinit(table_points);
-      std::vector<Table<dim,double> > data_tables(components+dim,data_table);
+      data_table.TableBase<dim,double>::reinit(new_table_points);
+      std::vector<Table<dim,double> > data_tables(components, data_table);
 
+      std::vector<std::vector<double>> coordinate_values(dim);
+      for (unsigned int d=0; d<dim; ++d)
+        coordinate_values[d].resize(new_table_points[d]);
 
-      // Read data lines
+      if (column_names.size()==0)
+        {
+          // set default column names:
+          for (unsigned int c=0; c<components; ++c)
+            column_names.push_back("column " + Utilities::int_to_string(c,2));
+        }
+
+      // Finally read data lines:
       unsigned int read_data_entries = 0;
       do
         {
+          // what row and column of the file are we in?
           const unsigned int column_num = read_data_entries%(components+dim);
+          const unsigned int row_num = read_data_entries/(components+dim);
+          TableIndices<dim> idx = compute_table_indices(new_table_points, row_num);
 
-          if (column_num >= dim)
+          if (column_num < dim)
             {
-              temp_data *= scale_factor;
-              maximum_component_value[column_num-dim] = std::max(maximum_component_value[column_num-dim], temp_data);
-            }
+              // This is a coordinate. Store (and check that they are consistent)
+              const double old_value = coordinate_values[column_num][idx[column_num]];
 
-          data_tables[column_num](compute_table_indices(read_data_entries)) = temp_data;
+              AssertThrow(old_value == 0. ||
+                          (std::abs(old_value-temp_data) < 1e-8*std::abs(old_value)),
+                          ExcMessage("Invalid coordinate "
+                                     + Utilities::int_to_string(column_num) + " in row "
+                                     + Utilities::int_to_string(row_num)
+                                     + " in file " + filename +
+                                     "\nThis class expects the coordinates to be structured, meaning "
+                                     "the coordinate values in each coordinate direction repeat exactly "
+                                     "each time."));
+
+              coordinate_values[column_num][idx[column_num]] = temp_data;
+            }
+          else
+            {
+              // This is a data value, so scale and store:
+              const unsigned int component = column_num - dim;
+              data_tables[component](idx) = temp_data * scale_factor;
+            }
 
           ++read_data_entries;
         }
@@ -1869,87 +1991,8 @@ namespace aspect
                               "of the file. Please check the number of data "
                               "lines against the POINTS header in the file."));
 
-      // In case the data is specified on a grid that is equidistant
-      // in each coordinate direction, we only need to store
-      // (besides the data) the number of intervals in each direction and
-      // the begin- and endpoints of the coordinates.
-      // In case the grid is not equidistant, we need to keep
-      // all the coordinates in each direction, which is more costly.
-      // Here we fill the data structures needed for both cases,
-      // and check whether the coordinates are equidistant or not.
-      // We also check the requirement that the coordinates are
-      // strictly ascending.
-
-      // The number of intervals in each direction
-      std::array<unsigned int,dim> table_intervals;
-
-      // Whether or not the grid is equidistant
-      coordinate_values_are_equidistant = true;
-
-      for (unsigned int i = 0; i < dim; i++)
-        {
-          table_intervals[i] = table_points[i] - 1;
-
-          TableIndices<dim> idx;
-          double temp_coord = data_tables[i](idx);
-          double new_temp_coord = 0;
-
-          // The minimum coordinates
-          grid_extent[i].first = temp_coord;
-
-          // The first coordinate value
-          coordinate_values[i].clear();
-          coordinate_values[i].push_back(temp_coord);
-
-          // The grid spacing
-          double grid_spacing = numbers::signaling_nan<double>();
-
-          // Loop over the rest of the coordinate points
-          for (unsigned int n = 1; n < table_points[i]; n++)
-            {
-              idx[i] = n;
-              new_temp_coord = data_tables[i](idx);
-              AssertThrow(new_temp_coord > temp_coord,
-                          ExcMessage ("Coordinates in dimension "
-                                      + int_to_string(i)
-                                      + " are not strictly ascending. "));
-
-              // Test whether grid is equidistant
-              if (n == 1)
-                grid_spacing = new_temp_coord - temp_coord;
-              else
-                {
-                  const double current_grid_spacing = new_temp_coord - temp_coord;
-                  // Compare current grid spacing with first grid spacing,
-                  // taking into account roundoff of the read-in coordinates
-                  if (std::abs(current_grid_spacing - grid_spacing) > 0.005*(current_grid_spacing+grid_spacing))
-                    coordinate_values_are_equidistant = false;
-                }
-
-              // Set the coordinate value
-              coordinate_values[i].push_back(new_temp_coord);
-
-              temp_coord = new_temp_coord;
-            }
-
-          // The maximum coordinate
-          grid_extent[i].second = temp_coord;
-        }
-
-      // For each data component, set up a GridData,
-      // its type depending on the read-in grid.
-      for (unsigned int i = 0; i < components; i++)
-        {
-          if (coordinate_values_are_equidistant)
-            data[i]
-              = std_cxx14::make_unique<Functions::InterpolatedUniformGridData<dim>> (grid_extent,
-                                                                                     table_intervals,
-                                                                                     data_tables[dim+i]);
-          else
-            data[i]
-              = std_cxx14::make_unique<Functions::InterpolatedTensorProductGridData<dim>> (coordinate_values,
-                                                                                           data_tables[dim+i]);
-        }
+      // finally create the data:
+      this->reinit(column_names, coordinate_values, data_tables);
     }
 
 
@@ -1973,14 +2016,14 @@ namespace aspect
 
     template <int dim>
     TableIndices<dim>
-    AsciiDataLookup<dim>::compute_table_indices(const unsigned int i) const
+    AsciiDataLookup<dim>::compute_table_indices(const TableIndices<dim> &sizes, const unsigned int i) const
     {
       TableIndices<dim> idx;
-      idx[0] = (i / (components+dim)) % table_points[0];
+      idx[0] = i % sizes[0];
       if (dim >= 2)
-        idx[1] = ((i / (components+dim)) / table_points[0]) % table_points[1];
+        idx[1] = (i / sizes[0]) % sizes[1];
       if (dim == 3)
-        idx[2] = (i / (components+dim)) / (table_points[0] * table_points[1]);
+        idx[2] = i / (sizes[0] * sizes[1]);
 
       return idx;
     }
@@ -2010,15 +2053,11 @@ namespace aspect
                            "text `$ASPECT_SOURCE_DIR' which will be interpreted as the path "
                            "in which the ASPECT source files were located when ASPECT was "
                            "compiled. This interpretation allows, for example, to reference "
-                           "files located in the `data/' subdirectory of ASPECT. ");
+                           "files located in the `data/' subdirectory of ASPECT.");
         prm.declare_entry ("Data file name",
                            default_filename,
                            Patterns::Anything (),
-                           "The file name of the model data. Provide file in format: "
-                           "(Velocity file name).\\%s\\%d where \\%s is a string specifying "
-                           "the boundary of the model according to the names of the boundary "
-                           "indicators (of the chosen geometry model).\\%d is any sprintf integer "
-                           "qualifier, specifying the format of the current file number. ");
+                           "The file name of the model data.");
         prm.declare_entry ("Scale factor", "1.",
                            Patterns::Double (),
                            "Scalar factor, which is applied to the model data. "
@@ -2077,7 +2116,7 @@ namespace aspect
                    || (Plugins::plugin_type_matches<const GeometryModel::Box<dim>> (this->get_geometry_model()))
                    || (Plugins::plugin_type_matches<const GeometryModel::TwoMergedBoxes<dim>> (this->get_geometry_model())),
                    ExcMessage ("This ascii data plugin can only be used when using "
-                               "a spherical shell, chunk or box geometry."));
+                               "a spherical shell, chunk, box or two merged boxes geometry."));
 
 
       for (const auto &boundary_id : boundary_ids)
@@ -2498,6 +2537,14 @@ namespace aspect
 
       prm.enter_subsection (subsection_name);
       {
+        prm.declare_entry ("Data file name",
+                           default_filename,
+                           Patterns::Anything (),
+                           "The file name of the model data. Provide file in format: "
+                           "(File name).\\%s\\%d, where \\%s is a string specifying "
+                           "the boundary of the model according to the names of the boundary "
+                           "indicators (of the chosen geometry model), and \\%d is any sprintf "
+                           "integer qualifier specifying the format of the current file number.");
         prm.declare_entry ("Data file time step", "1e6",
                            Patterns::Double (0.),
                            "Time step between following data files. "
@@ -2566,9 +2613,10 @@ namespace aspect
       AssertThrow ((Plugins::plugin_type_matches<GeometryModel::SphericalShell<dim> >(this->get_geometry_model()) ||
                     Plugins::plugin_type_matches<GeometryModel::Chunk<dim> >(this->get_geometry_model()) ||
                     Plugins::plugin_type_matches<GeometryModel::Sphere<dim> >(this->get_geometry_model()) ||
-                    Plugins::plugin_type_matches<GeometryModel::Box<dim> >(this->get_geometry_model())),
+                    Plugins::plugin_type_matches<GeometryModel::Box<dim> >(this->get_geometry_model())) ||
+                   Plugins::plugin_type_matches<GeometryModel::TwoMergedBoxes<dim>> (this->get_geometry_model()),
                    ExcMessage ("This ascii data plugin can only be used when using "
-                               "a spherical shell, chunk, sphere or box geometry."));
+                               "a spherical shell, chunk, sphere, box or two merged boxes geometry."));
 
       // Create the lookups for each file
       number_of_layer_boundaries = data_file_names.size();
@@ -2611,7 +2659,7 @@ namespace aspect
 
       double vertical_position;
       Point<dim-1> horizontal_position;
-      if (Plugins::plugin_type_matches<GeometryModel::Box<dim> >(this->get_geometry_model()))
+      if (this->get_geometry_model().natural_coordinate_system() == Utilities::Coordinates::CoordinateSystem::cartesian)
         {
           // in cartesian coordinates, the vertical component comes last
           vertical_position = internal_position[dim-1];
@@ -3487,6 +3535,57 @@ namespace aspect
           }
     }
 
+
+
+
+    template <int dim>
+    VectorFunctionFromVelocityFunctionObject<dim>::
+    VectorFunctionFromVelocityFunctionObject
+    (const unsigned int n_components,
+     const std::function<Tensor<1,dim> (const Point<dim> &)> &function_object)
+      :
+      Function<dim>(n_components),
+      function_object (function_object)
+    {
+    }
+
+
+
+    template <int dim>
+    double
+    VectorFunctionFromVelocityFunctionObject<dim>::value (const Point<dim> &p,
+                                                          const unsigned int component) const
+    {
+      Assert (component < this->n_components,
+              ExcIndexRange (component, 0, this->n_components));
+
+      if (component < dim)
+        {
+          const Tensor<1,dim> v = function_object(p);
+          return v[component];
+        }
+      else
+        return 0;
+    }
+
+
+
+    template <int dim>
+    void
+    VectorFunctionFromVelocityFunctionObject<dim>::
+    vector_value (const Point<dim>   &p,
+                  Vector<double>     &values) const
+    {
+      AssertDimension(values.size(), this->n_components);
+
+      // set everything to zero, and then the right components to their correct values
+      values = 0;
+
+      const Tensor<1,dim> v = function_object(p);
+      for (unsigned int d=0; d<dim; ++d)
+        values(d) = v[d];
+    }
+
 // Explicit instantiations
 
 #define INSTANTIATE(dim) \
@@ -3495,9 +3594,14 @@ namespace aspect
                                                       const ComponentMask &); \
   template \
   std::vector<std::string> \
-  expand_dimensional_variable_names<dim> (const std::vector<std::string> &var_declarations);
+  expand_dimensional_variable_names<dim> (const std::vector<std::string> &var_declarations); \
+  \
+  template \
+  class VectorFunctionFromVelocityFunctionObject<dim>;
 
     ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
 
 
 
@@ -3597,7 +3701,7 @@ namespace aspect
                      const unsigned int component_index,
                      const Quadrature<2> &quadrature,
                      const std::function<void(
-                       const typename DoFHandler<2>::active_cell_iterator &,
+                       const DoFHandler<2>::active_cell_iterator &,
                        const std::vector<Point<2> > &,
                        std::vector<double> &)> &function,
                      dealii::LinearAlgebra::distributed::Vector<double> &vec_result);
@@ -3608,7 +3712,7 @@ namespace aspect
                      const unsigned int component_index,
                      const Quadrature<3> &quadrature,
                      const std::function<void(
-                       const typename DoFHandler<3>::active_cell_iterator &,
+                       const DoFHandler<3>::active_cell_iterator &,
                        const std::vector<Point<3> > &,
                        std::vector<double> &)> &function,
                      dealii::LinearAlgebra::distributed::Vector<double> &vec_result);
@@ -3619,7 +3723,7 @@ namespace aspect
                      const unsigned int component_index,
                      const Quadrature<2> &quadrature,
                      const std::function<void(
-                       const typename DoFHandler<2>::active_cell_iterator &,
+                       const DoFHandler<2>::active_cell_iterator &,
                        const std::vector<Point<2> > &,
                        std::vector<double> &)> &function,
                      LinearAlgebra::BlockVector &vec_result);
@@ -3630,7 +3734,7 @@ namespace aspect
                      const unsigned int component_index,
                      const Quadrature<3> &quadrature,
                      const std::function<void(
-                       const typename DoFHandler<3>::active_cell_iterator &,
+                       const DoFHandler<3>::active_cell_iterator &,
                        const std::vector<Point<3> > &,
                        std::vector<double> &)> &function,
                      LinearAlgebra::BlockVector &vec_result);

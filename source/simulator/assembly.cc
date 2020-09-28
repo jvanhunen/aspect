@@ -38,9 +38,6 @@
 #include <deal.II/base/work_stream.h>
 #include <deal.II/base/signaling_nan.h>
 #include <deal.II/lac/full_matrix.h>
-#if !DEAL_II_VERSION_GTE(9,1,0)
-#  include <deal.II/lac/constraint_matrix.h>
-#endif
 #include <deal.II/grid/tria_iterator.h>
 #include <deal.II/grid/filtered_iterator.h>
 #include <deal.II/dofs/dof_accessor.h>
@@ -98,10 +95,6 @@ namespace aspect
     for (unsigned int q=0; q<n_q_points; ++q)
       for (unsigned int c=0; c<introspection.n_compositional_fields; ++c)
         material_model_inputs.composition[q][c] = composition_values[c][q];
-
-    DEAL_II_DISABLE_EXTRA_DIAGNOSTICS
-    material_model_inputs.cell = &cell;
-    DEAL_II_ENABLE_EXTRA_DIAGNOSTICS
 
     material_model_inputs.current_cell = cell;
   }
@@ -365,9 +358,7 @@ namespace aspect
 
     const QGauss<dim> quadrature_formula(parameters.stokes_velocity_degree+1);
 
-    typedef
-    FilteredIterator<typename DoFHandler<dim>::active_cell_iterator>
-    CellFilter;
+    using CellFilter = FilteredIterator<typename DoFHandler<dim>::active_cell_iterator>;
 
     // determine which update flags to use for the cell integrals
     const UpdateFlags cell_update_flags
@@ -461,14 +452,7 @@ namespace aspect
 #ifdef ASPECT_USE_PETSC
     Amg_data.symmetric_operator = false;
 #else
-#if DEAL_II_VERSION_GTE(9,2,0)
     Amg_data.constant_modes = constant_modes;
-#else
-    // To avoid a Trilinos error, only define constant modes
-    // if this mpi rank owns any DoFs:
-    if (dof_handler.n_locally_owned_dofs() != 0)
-      Amg_data.constant_modes = constant_modes;
-#endif
     Amg_data.elliptic = true;
     Amg_data.higher_order_elements = true;
 
@@ -739,9 +723,7 @@ namespace aspect
     const QGauss<dim>   quadrature_formula(parameters.stokes_velocity_degree+1);
     const QGauss<dim-1> face_quadrature_formula(parameters.stokes_velocity_degree+1);
 
-    typedef
-    FilteredIterator<typename DoFHandler<dim>::active_cell_iterator>
-    CellFilter;
+    using CellFilter = FilteredIterator<typename DoFHandler<dim>::active_cell_iterator>;
 
     // determine which updates flags we need on cells and faces
     const UpdateFlags cell_update_flags
@@ -1157,9 +1139,7 @@ namespace aspect
     system_rhs.block(block_idx) = 0;
 
 
-    typedef
-    FilteredIterator<typename DoFHandler<dim>::active_cell_iterator>
-    CellFilter;
+    using CellFilter = FilteredIterator<typename DoFHandler<dim>::active_cell_iterator>;
 
     Vector<double> viscosity_per_cell;
     viscosity_per_cell.reinit(triangulation.n_active_cells());
@@ -1294,4 +1274,6 @@ namespace aspect
 
 
   ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
 }

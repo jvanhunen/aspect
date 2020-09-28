@@ -386,7 +386,7 @@ namespace aspect
           prm.declare_entry ("Thermal expansion coefficient in initial temperature scaling", "2e-5",
                              Patterns::Double (0.),
                              "The value of the thermal expansion coefficient $\\beta$. "
-                             "Units: $1/K$.");
+                             "Units: \\si{\\per\\kelvin}.");
           prm.declare_entry ("Use thermal expansion coefficient from material model", "false",
                              Patterns::Bool (),
                              "Option to take the thermal expansion coefficient from the "
@@ -498,10 +498,10 @@ namespace aspect
                                               "'Vs to density scaling' parameter or depth-dependent and "
                                               "read in from a file. To convert density the user can specify "
                                               "the 'Thermal expansion coefficient in initial temperature scaling' "
-                                              "parameter. The scaling is as follows: $\\delta ln \\rho "
-                                              "(r,\\theta,\\phi) = \\xi \\cdot \\delta ln v_s(r,\\theta, "
+                                              "parameter. The scaling is as follows: $\\delta \\ln \\rho "
+                                              "(r,\\theta,\\phi) = \\xi \\cdot \\delta \\ln v_s(r,\\theta, "
                                               "\\phi)$ and $\\delta T(r,\\theta,\\phi) = - \\frac{1}{\\alpha} "
-                                              "\\delta ln \\rho(r,\\theta,\\phi)$. $\\xi$ is the `vs to "
+                                              "\\delta \\ln \\rho(r,\\theta,\\phi)$. $\\xi$ is the `vs to "
                                               "density scaling' parameter and $\\alpha$ is the 'Thermal "
                                               "expansion coefficient in initial temperature scaling' "
                                               "parameter. The temperature perturbation is added to an "

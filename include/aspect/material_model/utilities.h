@@ -105,7 +105,7 @@ namespace aspect
              * the dHdT and dHdp functions. The third argument represents
              * the number of substeps taken to compute this average. A number
              * larger than one means the temperature-pressure range that is spanned
-             * by the first two input arguments is seperated into @p n_substeps
+             * by the first two input arguments is separated into @p n_substeps
              * equally spaced pressure-temperature steps, the derivatives are
              * computed for each substep and then averaged.
              */
@@ -117,6 +117,22 @@ namespace aspect
             double
             dRhodp (const double temperature,
                     const double pressure) const;
+
+            /**
+             * Returns a vector of all the column names in the lookup file
+             * that start with the character string vol_fraction_
+             */
+            std::vector<std::string>
+            phase_volume_column_names() const;
+
+            /**
+             * Returns the volume fraction of the phase_idth phase
+             * at a given temperature and pressure.
+             */
+            double
+            phase_volume_fraction(const int phase_id,
+                                  const double temperature,
+                                  const double pressure) const;
 
             /**
              * Returns the size of the data tables in pressure (first entry)
@@ -156,6 +172,15 @@ namespace aspect
             dealii::Table<2,double> vs_values;
             dealii::Table<2,double> enthalpy_values;
 
+            /**
+            * The vector of column names corresponding to each phase,
+            * and a vector of tables containing the volume fractions of
+            * each phase at a given temperature and pressure.
+            * The ordering of both vectors is the same.
+            */
+            std::vector<std::string> phase_column_names;
+            std::vector<dealii::Table<2,double>> phase_volume_fractions;
+
             double delta_press;
             double min_press;
             double max_press;
@@ -164,6 +189,8 @@ namespace aspect
             double max_temp;
             unsigned int n_temperature;
             unsigned int n_pressure;
+            unsigned int n_phases;
+            unsigned int n_columns;
             bool interpolation;
         };
 
@@ -267,6 +294,46 @@ namespace aspect
       double average_value (const std::vector<double> &volume_fractions,
                             const std::vector<double> &parameter_values,
                             const CompositionalAveragingOperation &average_type);
+
+      /**
+       * Utilities for material models with multiple phases
+       */
+      namespace PhaseUtilities
+      {
+        /**
+         * Enumeration for selecting which averaging scheme to use when
+         * averaging the properties of different phases.
+         * Select between arithmetic and logarithmic.
+        */
+        enum PhaseAveragingOperation
+        {
+          arithmetic,
+          logarithmic
+        };
+      }
+
+      /**
+      * Material models compute output quantities such as the viscosity, the
+      * density, etc. For some models, these values may depend on the phase in
+      * addition to the composition, and more than one phase field might have
+      * nonzero values at a given quadrature point. This means that properties
+      * for each composition have to be averaged based on the fractions of each
+      * phase field present. This function performs this type of averaging.
+      * The averaging is based on the choice in @p operation. Averaging is conducted
+      * over the phase functions given in @p phase_function_values, with
+      * @p parameter_values containing values of all individual phases. Unlike the average_value
+      * function defined for compositions, averaging in this function is calculated based
+      * on phase functions and the change of variables on the trajectory of phase boundaries.
+      * Thus on a single phase boundary, values of variables change gradually from one phase
+      * to the other. The values of the phase function used to average the properties varies
+      * between 0 and 1.
+      */
+      double phase_average_value (const std::vector<double> &phase_function_values,
+                                  const std::vector<unsigned int> &n_phases_per_composition,
+                                  const std::vector<double> &parameter_values,
+                                  const unsigned int composition,
+                                  const PhaseUtilities::PhaseAveragingOperation operation = PhaseUtilities::arithmetic);
+
 
 
       /**

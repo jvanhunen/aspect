@@ -38,7 +38,7 @@ namespace aspect
        * A class derived from DataPostprocessor that takes an output vector
        * and computes a variable that represents the 3 or 6 independent
        * components (in 2d and 3d, respectively) of the stress tensor at every
-       * point. The shear stress is defined as $2 \eta (\varepsilon(\mathbf u)
+       * point. The stress is defined as $2 \eta (\varepsilon(\mathbf u)
        * - \tfrac 13 \textrm{trace}\ \varepsilon(\mathbf u) \mathbf 1) +pI =
        * 2\eta (\varepsilon(\mathbf u) - \frac 13 (\nabla \cdot \mathbf u)
        * \mathbf I) + pI$.  The second term in the parentheses is zero if the
@@ -49,40 +49,19 @@ namespace aspect
        */
       template <int dim>
       class Stress
-        : public DataPostprocessor<dim>,
+        : public DataPostprocessorTensor<dim>,
           public SimulatorAccess<dim>,
           public Interface<dim>
       {
         public:
+          /**
+           * Constructor.
+           */
+          Stress ();
+
           void
           evaluate_vector_field(const DataPostprocessorInputs::Vector<dim> &input_data,
                                 std::vector<Vector<double> > &computed_quantities) const override;
-
-          /**
-           * Return the vector of strings describing the names of the computed
-           * quantities. Given the purpose of this class, this is a vector
-           * with entries all equal to the name of the plugin.
-           */
-          std::vector<std::string> get_names () const override;
-
-          /**
-           * This functions returns information about how the individual
-           * components of output files that consist of more than one data set
-           * are to be interpreted. The returned value is
-           * DataComponentInterpretation::component_is_scalar repeated
-           * SymmetricTensor::n_independent_components times. (These
-           * components should really be part of a symmetric tensor, but
-           * deal.II does not allow marking components as such.)
-           */
-          std::vector<DataComponentInterpretation::DataComponentInterpretation>
-          get_data_component_interpretation () const override;
-
-          /**
-           * Return which data has to be provided to compute the derived
-           * quantities. The flags returned here are the ones passed to the
-           * constructor of this class.
-           */
-          UpdateFlags get_needed_update_flags () const override;
       };
     }
   }

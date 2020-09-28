@@ -265,51 +265,48 @@ namespace aspect
             if (face_idx != numbers::invalid_unsigned_int && at_upper_surface)
               {
                 for (unsigned int q=0; q<fe_face_values.n_quadrature_points; ++q)
-                  surface_stored_values.push_back (std::make_pair(fe_face_values.quadrature_point(q), std::make_pair(fe_face_values.JxW(q), topo_values[q])));
+                  surface_stored_values.emplace_back (std::make_pair(fe_face_values.quadrature_point(q), std::make_pair(fe_face_values.JxW(q), topo_values[q])));
               }
 
             // if the cell at bottom boundary, add its contributions dynamic topography storage vector
             if (face_idx != numbers::invalid_unsigned_int && !at_upper_surface)
               {
                 for (unsigned int q=0; q<fe_face_values.n_quadrature_points; ++q)
-                  CMB_stored_values.push_back (std::make_pair(fe_face_values.quadrature_point(q), std::make_pair(fe_face_values.JxW(q), topo_values[q])));
+                  CMB_stored_values.emplace_back (std::make_pair(fe_face_values.quadrature_point(q), std::make_pair(fe_face_values.JxW(q), topo_values[q])));
               }
           }
 
-      // Subtract the average dynamic topography.
-      // Transfer the geocentric coordinates to the spherical coordinates.
-      // Prepare the value of spherical infinitesimal, i.e., sin(theta)*d_theta*d_phi, for the later spherical harmonic expansion.
-      std::vector<std::vector<double> > surface_topo_spherical_function; // store theta, phi, spherical infinitesimal, and surface dynamic topography
-      std::vector<std::vector<double> > CMB_topo_spherical_function; // store theta, phi, spherical infinitesimal, and CMB dynamic topography
+      std::vector<std::vector<double> > surface_topo_spherical_function;
+      std::vector<std::vector<double> > CMB_topo_spherical_function;
+
       for (unsigned int i=0; i<surface_stored_values.size(); ++i)
         {
-          const std::array<double,3> scoord = aspect::Utilities::Coordinates::cartesian_to_spherical_coordinates(surface_stored_values.at(i).first);
-          const double theta = scoord[2];
-          const double phi = scoord[1];
+          const std::array<double,3> scoord = aspect::Utilities::Coordinates::cartesian_to_spherical_coordinates(surface_stored_values[i].first);
+
           // calculate spherical infinitesimal sin(theta)*d_theta*d_phi by infinitesimal_area/radius^2
-          const double infinitesimal = surface_stored_values.at(i).second.first/(outer_radius*outer_radius);
-          // assign the spherical function containing theta, phi, spherical infinitesimal, and surface dynamic topography
-          std::vector<double> tmp;
-          tmp.push_back(theta);
-          tmp.push_back(phi);
-          tmp.push_back(infinitesimal);
-          tmp.push_back(surface_stored_values.at(i).second.second);
-          surface_topo_spherical_function.push_back(tmp);
+          const double infinitesimal = surface_stored_values[i].second.first/(outer_radius*outer_radius);
+
+          // theta, phi, spherical infinitesimal, and surface dynamic topography
+          surface_topo_spherical_function.emplace_back(std::vector<double> {scoord[2],
+                                                                            scoord[1],
+                                                                            infinitesimal,
+                                                                            surface_stored_values[i].second.second
+                                                                           });
         }
+
       for (unsigned int i=0; i<CMB_stored_values.size(); ++i)
         {
-          const std::array<double,3> scoord = aspect::Utilities::Coordinates::cartesian_to_spherical_coordinates(CMB_stored_values.at(i).first);
-          const double theta = scoord[2];
-          const double phi = scoord[1];
+          const std::array<double,3> scoord = aspect::Utilities::Coordinates::cartesian_to_spherical_coordinates(CMB_stored_values[i].first);
+
           // calculate spherical infinitesimal sin(theta)*d_theta*d_phi by infinitesimal_area/radius^2
-          const double infinitesimal = CMB_stored_values.at(i).second.first/(inner_radius*inner_radius);
-          // assign the spherical function containing theta, phi, spherical infinitesimal, and CMB dynamic topography
-          std::vector<double> tmp;
-          tmp.push_back(theta);
-          tmp.push_back(phi);
-          tmp.push_back(infinitesimal);
-          tmp.push_back(CMB_stored_values.at(i).second.second);
-          CMB_topo_spherical_function.push_back(tmp);
+          const double infinitesimal = CMB_stored_values[i].second.first/(inner_radius*inner_radius);
+
+          // theta, phi, spherical infinitesimal, and CMB dynamic topography
+          CMB_topo_spherical_function.emplace_back(std::vector<double> {scoord[2],
+                                                                        scoord[1],
+                                                                        infinitesimal,
+                                                                        CMB_stored_values[i].second.second
+                                                                       });
         }
 
       std::pair<double, std::pair<std::vector<double>,std::vector<double> > > SH_surface_dyna_topo_coes;
@@ -349,7 +346,7 @@ namespace aspect
 
       std::pair<double, std::pair<std::vector<double>,std::vector<double> > > SH_surface_dyna_topo_coes;
       std::pair<double, std::pair<std::vector<double>,std::vector<double> > > SH_CMB_dyna_topo_coes;
-      // Initialize the surface and CMB density contrasts with NaNs becasue they may be unused in case of no dynamic topography contribution.
+      // Initialize the surface and CMB density contrasts with NaNs because they may be unused in case of no dynamic topography contribution.
       double surface_delta_rho = numbers::signaling_nan<double>();
       double CMB_delta_rho = numbers::signaling_nan<double>();
       if (include_dynamic_topo_contribution == true)

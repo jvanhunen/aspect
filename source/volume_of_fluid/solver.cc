@@ -21,11 +21,7 @@
 #include <aspect/global.h>
 #include <aspect/volume_of_fluid/handler.h>
 
-#if DEAL_II_VERSION_GTE(9,1,0)
-#  include <deal.II/lac/affine_constraints.h>
-#else
-#  include <deal.II/lac/constraint_matrix.h>
-#endif
+#include <deal.II/lac/affine_constraints.h>
 
 #ifdef ASPECT_USE_PETSC
 #include <deal.II/lac/solver_cg.h>
@@ -61,7 +57,7 @@ namespace aspect
 #endif
 
     // Create distributed vector (we need all blocks here even though we only
-    // solve for the current block) because only have a ConstraintMatrix
+    // solve for the current block) because only have a AffineConstraints<double>
     // for the whole system, current_linearization_point contains our initial guess.
     LinearAlgebra::BlockVector distributed_solution (
       this->introspection().index_sets.system_partitioning,
@@ -114,4 +110,6 @@ namespace aspect
 
 
   ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
 }

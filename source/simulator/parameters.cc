@@ -80,7 +80,7 @@ namespace aspect
                        "checkpoint file, otherwise started from scratch.");
 
     prm.declare_entry ("Max nonlinear iterations", "10",
-                       Patterns::Integer (0),
+                       Patterns::Integer (1),
                        "The maximal number of nonlinear iterations to be performed.");
 
     prm.declare_entry ("Max nonlinear iterations in pre-refinement", boost::lexical_cast<std::string>(std::numeric_limits<int>::max()),
@@ -169,7 +169,7 @@ namespace aspect
                        "particular number. For example, if this parameter is set to $50$, then that means that "
                        "the time step can at most increase by 50\\% from one time step to the next, or by a "
                        "factor of 1.5. "
-                       "Units: \\%");
+                       "Units: \\%.");
 
     prm.declare_entry ("Use conduction timestep", "false",
                        Patterns::Bool (),
@@ -182,6 +182,9 @@ namespace aspect
     const std::string allowed_solver_schemes = "single Advection, single Stokes|iterated Advection and Stokes|"
                                                "single Advection, iterated Stokes|no Advection, iterated Stokes|"
                                                "no Advection, single Stokes|"
+                                               "no Advection, iterated defect correction Stokes|"
+                                               "single Advection, iterated defect correction Stokes|"
+                                               "iterated Advection and defect correction Stokes|"
                                                "iterated Advection and Newton Stokes|single Advection, iterated Newton Stokes|"
                                                "single Advection, no Stokes|IMPES|iterated IMPES|"
                                                "iterated Stokes|Newton Stokes|Stokes only|Advection only|"
@@ -551,7 +554,7 @@ namespace aspect
                            "More precisely, this length scale represents the square root of the "
                            "product of diffusivity and time in the diffusion equation, and controls "
                            "the distance over which features are diffused. "
-                           "Units: $\\si{m}$.");
+                           "Units: \\si{\\meter}.");
       }
       prm.leave_subsection ();
     }
@@ -757,7 +760,9 @@ namespace aspect
                          Patterns::Integer (0),
                          "The number of adaptive refinement steps performed after "
                          "initial global refinement but while still within the first "
-                         "time step.");
+                         "time step. These refinement steps (n) are added to the value "
+                         "for initial global refinement (m) so that the final mesh has "
+                         "cells that are at most on refinement level $n+m$.");
       prm.declare_entry ("Time steps between mesh refinement", "10",
                          Patterns::Integer (0),
                          "The number of time steps after which the mesh is to be "
@@ -765,12 +770,16 @@ namespace aspect
                          "then the mesh will never be changed.");
       prm.declare_entry ("Refinement fraction", "0.3",
                          Patterns::Double(0., 1.),
-                         "The fraction of cells with the largest error that "
-                         "should be flagged for refinement.");
+                         "Cells are sorted from largest to smallest by their total error "
+                         "(determined by the Strategy). Then the cells with the largest "
+                         "error (top of this sorted list) that account for given fraction "
+                         "of the error are refined.");
       prm.declare_entry ("Coarsening fraction", "0.05",
                          Patterns::Double(0., 1.),
-                         "The fraction of cells with the smallest error that "
-                         "should be flagged for coarsening.");
+                         "Cells are sorted from largest to smallest by their total error "
+                         "(determined by the Strategy). Then the cells with the smallest "
+                         "error (bottom of this sorted list) that account for the given fraction "
+                         "of the error are coarsened.");
       prm.declare_entry ("Adapt by fraction of cells", "false",
                          Patterns::Bool(),
                          "Use fraction of the total number of cells instead of "
@@ -798,7 +807,9 @@ namespace aspect
                          Patterns::Bool (),
                          "Whether or not the postprocessors should be executed after "
                          "each of the initial adaptive refinement cycles that are run at "
-                         "the start of the simulation.");
+                         "the start of the simulation. This is useful for "
+                         "plotting/analyzing how the mesh refinement parameters are "
+                         "working for a particular model.");
       prm.declare_entry ("Skip solvers on initial refinement", "false",
                          Patterns::Bool (),
                          "Whether or not solvers should be executed during the initial "
@@ -807,7 +818,7 @@ namespace aspect
       prm.declare_entry ("Skip setup initial conditions on initial refinement", "false",
                          Patterns::Bool (),
                          "Whether or not the initial conditions should be set up during the "
-                         "the adaptive refinement cycles that are run at the start of the "
+                         "adaptive refinement cycles that are run at the start of the "
                          "simulation.");
     }
     prm.leave_subsection();
@@ -1085,14 +1096,16 @@ namespace aspect
                            "The maximum global composition values that will be used in the bound preserving "
                            "limiter for the discontinuous solutions from composition advection fields. "
                            "The number of the input 'Global composition maximum' values separated by ',' has to be "
-                           "the same as the number of the compositional fields");
+                           "one or the same as the number of the compositional fields. When only one value "
+                           "is supplied, this same value is assumed for all compositional fields.");
         prm.declare_entry ("Global composition minimum",
                            boost::lexical_cast<std::string>(-std::numeric_limits<double>::max()),
                            Patterns::List(Patterns::Double ()),
                            "The minimum global composition value that will be used in the bound preserving "
                            "limiter for the discontinuous solutions from composition advection fields. "
                            "The number of the input 'Global composition minimum' values separated by ',' has to be "
-                           "the same as the number of the compositional fields");
+                           "one or the same as the number of the compositional fields. When only one value "
+                           "is supplied, this same value is assumed for all compositional fields.");
       }
       prm.leave_subsection ();
     }
@@ -1313,6 +1326,12 @@ namespace aspect
         nonlinear_solver = NonlinearSolver::no_Advection_iterated_Stokes;
       else if (solver_scheme == "no Advection, single Stokes")
         nonlinear_solver = NonlinearSolver::no_Advection_single_Stokes;
+      else if (solver_scheme == "no Advection, iterated defect correction Stokes")
+        nonlinear_solver = NonlinearSolver::no_Advection_iterated_defect_correction_Stokes;
+      else if (solver_scheme == "single Advection, iterated defect correction Stokes")
+        nonlinear_solver = NonlinearSolver::single_Advection_iterated_defect_correction_Stokes;
+      else if (solver_scheme == "iterated Advection and defect correction Stokes")
+        nonlinear_solver = NonlinearSolver::iterated_Advection_and_defect_correction_Stokes;
       else if (solver_scheme == "iterated Advection and Newton Stokes" || solver_scheme == "Newton Stokes")
         nonlinear_solver = NonlinearSolver::iterated_Advection_and_Newton_Stokes;
       else if (solver_scheme == "single Advection, iterated Newton Stokes")
@@ -1553,13 +1572,13 @@ namespace aspect
             nullspace_removal = typename NullspaceRemoval::Kind(
                                   nullspace_removal | NullspaceRemoval::net_translation_z);
           else if (nullspace_names[i]=="linear x momentum")
-            nullspace_removal = typename       NullspaceRemoval::Kind(
+            nullspace_removal = typename NullspaceRemoval::Kind(
                                   nullspace_removal | NullspaceRemoval::linear_momentum_x);
           else if (nullspace_names[i]=="linear y momentum")
-            nullspace_removal = typename       NullspaceRemoval::Kind(
+            nullspace_removal = typename NullspaceRemoval::Kind(
                                   nullspace_removal | NullspaceRemoval::linear_momentum_y);
           else if (nullspace_names[i]=="linear z momentum")
-            nullspace_removal = typename       NullspaceRemoval::Kind(
+            nullspace_removal = typename NullspaceRemoval::Kind(
                                   nullspace_removal | NullspaceRemoval::linear_momentum_z);
           else if (nullspace_names[i]=="linear momentum")
             nullspace_removal = typename NullspaceRemoval::Kind(
@@ -1633,10 +1652,14 @@ namespace aspect
           = prm.get_bool("Use limiter for discontinuous composition solution");
         global_temperature_max_preset       = prm.get_double ("Global temperature maximum");
         global_temperature_min_preset       = prm.get_double ("Global temperature minimum");
-        global_composition_max_preset       = Utilities::string_to_double
-                                              (Utilities::split_string_list(prm.get ("Global composition maximum")));
-        global_composition_min_preset       = Utilities::string_to_double
-                                              (Utilities::split_string_list(prm.get ("Global composition minimum")));
+        global_composition_max_preset       = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double
+                                                                                      (Utilities::split_string_list(prm.get ("Global composition maximum"))),
+                                                                                      n_compositional_fields,
+                                                                                      "Global composition maximum");
+        global_composition_min_preset       = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double
+                                                                                      (Utilities::split_string_list(prm.get ("Global composition minimum"))),
+                                                                                      n_compositional_fields,
+                                                                                      "Global composition minimum");
       }
       prm.leave_subsection ();
 
@@ -1690,7 +1713,6 @@ namespace aspect
 
     prm.enter_subsection ("Compositional fields");
     {
-      n_compositional_fields = prm.get_integer ("Number of fields");
       if (include_melt_transport && (n_compositional_fields == 0))
         {
           AssertThrow (false,
@@ -1746,15 +1768,6 @@ namespace aspect
 
       AssertThrow (normalized_fields.size() <= n_compositional_fields,
                    ExcMessage("Invalid input parameter file: Too many entries in List of normalized fields"));
-
-      // global_composition_max_preset.size() and global_composition_min_preset.size() are obtained early than
-      // n_compositional_fields. Therefore, we can only check if their sizes are the same here.
-      if (use_limiter_for_discontinuous_composition_solution)
-        AssertThrow ((global_composition_max_preset.size() == (n_compositional_fields)
-                      && global_composition_min_preset.size() == (n_compositional_fields)),
-                     ExcMessage ("The number of multiple 'Global composition maximum' values "
-                                 "and the number of multiple 'Global composition minimum' values "
-                                 "have to be the same as the total number of compositional fields"));
 
       std::vector<std::string> x_compositional_field_methods
         = Utilities::split_string_list
@@ -1830,20 +1843,19 @@ namespace aspect
                    ExcMessage ("The list of names for the mapped particle property fields needs to either be empty or have a length equal to "
                                "the number of compositional fields that are interpolated from particle properties."));
 
-      for (std::vector<std::string>::const_iterator p = x_mapped_particle_properties.begin();
-           p != x_mapped_particle_properties.end(); ++p)
+      for (const auto &p : x_mapped_particle_properties)
         {
           // each entry has the format (white space is optional):
           // <name> : <value (might have spaces)> [component]
           //
           // first tease apart the two halves
-          const std::vector<std::string> split_parts = Utilities::split_string_list (*p, ':');
+          const std::vector<std::string> split_parts = Utilities::split_string_list (p, ':');
           AssertThrow (split_parts.size() == 2,
                        ExcMessage ("The format for mapped particle properties  "
                                    "requires that each entry has the form `"
                                    "<name of field> : <particle property> [component]', "
                                    "but there does not appear to be a colon in the entry <"
-                                   + *p
+                                   + p
                                    + ">."));
 
           // the easy part: get the name of the compositional field
@@ -1960,20 +1972,19 @@ namespace aspect
       const std::vector<std::string> x_prescribed_traction_boundary_indicators
         = Utilities::split_string_list
           (prm.get ("Prescribed traction boundary indicators"));
-      for (std::vector<std::string>::const_iterator p = x_prescribed_traction_boundary_indicators.begin();
-           p != x_prescribed_traction_boundary_indicators.end(); ++p)
+      for (const auto &p : x_prescribed_traction_boundary_indicators)
         {
           // each entry has the format (white space is optional):
           // <id> [x][y][z] : <value (might have spaces)>
           //
           // first tease apart the two halves
-          const std::vector<std::string> split_parts = Utilities::split_string_list (*p, ':');
+          const std::vector<std::string> split_parts = Utilities::split_string_list (p, ':');
           AssertThrow (split_parts.size() == 2,
                        ExcMessage ("The format for prescribed traction boundary indicators "
                                    "requires that each entry has the form `"
                                    "<id> [x][y][z] : <value>', but there does not "
                                    "appear to be a colon in the entry <"
-                                   + *p
+                                   + p
                                    + ">."));
 
           // the easy part: get the value
@@ -2081,7 +2092,7 @@ namespace aspect
     MeshDeformation::MeshDeformationHandler<dim>::declare_parameters (prm);
     Postprocess::Manager<dim>::declare_parameters (prm);
     MeshRefinement::Manager<dim>::declare_parameters (prm);
-    TerminationCriteria::Manager<dim>::declare_parameters (prm);
+    TimeStepping::Manager<dim>::declare_parameters (prm);
     MaterialModel::declare_parameters<dim> (prm);
     HeatingModel::Manager<dim>::declare_parameters (prm);
     GeometryModel::declare_parameters <dim>(prm);
@@ -2114,4 +2125,6 @@ namespace aspect
   template void Simulator<dim>::declare_parameters (ParameterHandler &prm);
 
   ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
 }

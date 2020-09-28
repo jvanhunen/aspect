@@ -51,8 +51,20 @@ namespace aspect
 
           // Calculate Viscosity
           {
-            const double delta_temp = temperature-reference_T;
-            double visc_temperature_dependence = std::max(std::min(std::exp(-thermal_viscosity_exponent*delta_temp/reference_T),1e2),1e-2);
+            const double reference_temperature = (this->include_adiabatic_heating()
+                                                  ?
+                                                  this->get_adiabatic_conditions().temperature(in.position[i])
+                                                  :
+                                                  reference_T);
+
+            const double delta_temp = temperature-reference_temperature;
+            const double T_dependence = ( thermal_viscosity_exponent == 0.0
+                                          ?
+                                          0.0
+                                          :
+                                          thermal_viscosity_exponent * delta_temp / reference_temperature );
+
+            double visc_temperature_dependence = std::max(std::min(std::exp(-T_dependence),1e2),1e-2);
 
             if (std::isnan(visc_temperature_dependence))
               visc_temperature_dependence = 1.0;
@@ -237,13 +249,15 @@ namespace aspect
         {
           prm.declare_entry ("Reference density", "3300.",
                              Patterns::Double (0.),
-                             "Reference density $\\rho_0$. Units: $kg/m^3$.");
+                             "Reference density $\\rho_0$. "
+                             "Units: \\si{\\kilogram\\per\\meter\\cubed}.");
           prm.declare_entry ("Reference temperature", "293.",
                              Patterns::Double (0.),
-                             "The reference temperature $T_0$. Units: $\\si{K}$.");
+                             "The reference temperature $T_0$. Units: \\si{\\kelvin}.");
           prm.declare_entry ("Viscosity", "5e24",
                              Patterns::Double (0.),
-                             "The value of the constant viscosity. Units: $kg/m/s$.");
+                             "The value of the constant viscosity. "
+                             "Units: \\si{\\pascal\\second}.");
           prm.declare_entry ("Composition viscosity prefactor", "1.0",
                              Patterns::Double (0.),
                              "A linear dependency of viscosity on composition. Dimensionless prefactor.");
@@ -253,19 +267,19 @@ namespace aspect
           prm.declare_entry ("Thermal conductivity", "2.38",
                              Patterns::Double (0.),
                              "The value of the thermal conductivity $k$. "
-                             "Units: $W/m/K$.");
+                             "Units: \\si{\\watt\\per\\meter\\per\\kelvin}.");
           prm.declare_entry ("Reference specific heat", "1250.",
                              Patterns::Double (0.),
                              "The value of the specific heat $C_p$. "
-                             "Units: $J/kg/K$.");
+                             "Units: \\si{\\joule\\per\\kelvin\\per\\kilogram}.");
           prm.declare_entry ("Thermal expansion coefficient", "4e-5",
                              Patterns::Double (0.),
                              "The value of the thermal expansion coefficient $\\beta$. "
-                             "Units: $1/K$.");
+                             "Units: \\si{\\per\\kelvin}.");
           prm.declare_entry ("Compressibility", "5.124e-12",
                              Patterns::Double (0.),
                              "The value of the compressibility $\\kappa$. "
-                             "Units: $1/Pa$.");
+                             "Units: \\si{\\per\\pascal}.");
           prm.declare_entry ("Density differential for compositional field 1", "0.",
                              Patterns::Double(),
                              "If compositional fields are used, then one would frequently want "
@@ -275,8 +289,8 @@ namespace aspect
                              "one with its linear dependence on the temperature. If there are compositional "
                              "fields, then the density only depends on the first one in such a way that "
                              "the density has an additional term of the kind $+\\Delta \\rho \\; c_1(\\mathbf x)$. "
-                             "This parameter describes the value of $\\Delta \\rho$. Units: $kg/m^3/\\textrm{unit "
-                             "change in composition}$.");
+                             "This parameter describes the value of $\\Delta \\rho$. "
+                             "Units: \\si{\\kilogram\\per\\meter\\cubed}/unit change in composition.");
           prm.declare_entry ("Phase transition density jumps", "",
                              Patterns::List (Patterns::Double (0.)),
                              "A list of density jumps at each phase transition. A positive value means "
@@ -284,7 +298,7 @@ namespace aspect
                              "Corresponding phase for density jump determines if the density jump occurs "
                              "in peridotite, eclogite or none of them."
                              "List must have the same number of entries as Phase transition depths. "
-                             "Units: $kg/m^3$.");
+                             "Units: \\si{\\kilogram\\per\\meter\\cubed}.");
           prm.declare_entry ("Corresponding phase for density jump", "",
                              Patterns::List (Patterns::Integer(0)),
                              "A list of phases, which correspond to the Phase transition density jumps. "
@@ -292,7 +306,7 @@ namespace aspect
                              "0 stands for the 1st compositional fields, 1 for the second compositional field "
                              "and -1 for none of them. "
                              "List must have the same number of entries as Phase transition depths. "
-                             "Units: $Pa/K$.");
+                             "Units: \\si{\\pascal\\per\\kelvin}.");
           prm.declare_entry ("Viscosity prefactors", "",
                              Patterns::List (Patterns::Double (0.)),
                              "A list of prefactors for the viscosity for each phase. The reference "

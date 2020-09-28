@@ -1,15 +1,33 @@
+# Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
+#
+# This file is part of ASPECT.
+#
+# ASPECT is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2, or (at your option)
+# any later version.
+#
+# ASPECT is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with ASPECT; see the file LICENSE.  If not see
+# <http://www.gnu.org/licenses/>.
+
 ################### top matter ################
 CMAKE_MINIMUM_REQUIRED(VERSION 2.8.12)
 
 IF (CMP0058)
- cmake_policy(CMP0058 NEW) 
+ cmake_policy(CMP0058 NEW)
 ENDIF()
 
 SET(ASPECT_BINARY "${ASPECT_BINARY}" CACHE STRING "" FORCE)
 SET(Aspect_DIR "${Aspect_DIR}" CACHE STRING "" FORCE)
 SET(ASPECT_COMPARE_TEST_RESULTS "${ASPECT_COMPARE_TEST_RESULTS}" CACHE BOOL "" FORCE)
 
-FIND_PACKAGE(Aspect 2.1.0 QUIET HINTS ${Aspect_DIR})
+FIND_PACKAGE(Aspect 2.2.0 QUIET HINTS ${Aspect_DIR})
 DEAL_II_INITIALIZE_CACHED_VARIABLES()
 
 FIND_PACKAGE(Perl)
@@ -59,7 +77,7 @@ ENDFUNCTION()
 # TRILINOS" - run with PETSc and Trilinos. If neither is present we only run
 # using Trilinos.
 # 2. "WORLD BUILDER" - only run with World Builder.
-# 3. "QUICK_TEST" - enable the test even if RUN_ALL_TESTS is false 
+# 3. "QUICK_TEST" - enable the test even if RUN_ALL_TESTS is false
 FUNCTION(SHOULD_ENABLE_TEST _filename)
 
   FILE(STRINGS ${_filename} _input_lines
@@ -293,13 +311,13 @@ FOREACH(_test ${_tests})
     IF("${_mpi_count}" STREQUAL "1")
       ADD_CUSTOM_COMMAND(
         OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/output-${_testname}/screen-output
-        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/cmake/run_test.sh ${EXPECT} ${ASPECT_BINARY} ${CMAKE_CURRENT_BINARY_DIR}/${_testname}.x.prm ${CMAKE_CURRENT_BINARY_DIR}/output-${_testname}/screen-output.tmp
+        COMMAND timeout ${TEST_TIME_LIMIT}s ${CMAKE_CURRENT_SOURCE_DIR}/cmake/run_test.sh ${EXPECT} ${ASPECT_BINARY} ${CMAKE_CURRENT_BINARY_DIR}/${_testname}.x.prm ${CMAKE_CURRENT_BINARY_DIR}/output-${_testname}/screen-output.tmp
         COMMAND ${_replacement_script} screen-output <${CMAKE_CURRENT_BINARY_DIR}/output-${_testname}/screen-output.tmp >${CMAKE_CURRENT_BINARY_DIR}/output-${_testname}/screen-output
         DEPENDS ${ASPECT_BINARY} ${CMAKE_CURRENT_BINARY_DIR}/${_testname}.x.prm ${_testdepends})
     ELSE()
       ADD_CUSTOM_COMMAND(
         OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/output-${_testname}/screen-output
-        COMMAND mpirun -np ${_mpi_count} ${ASPECT_BINARY} ${CMAKE_CURRENT_BINARY_DIR}/${_testname}.x.prm
+        COMMAND timeout ${TEST_TIME_LIMIT}s mpirun -np ${_mpi_count} ${ASPECT_BINARY} ${CMAKE_CURRENT_BINARY_DIR}/${_testname}.x.prm
                 > ${CMAKE_CURRENT_BINARY_DIR}/output-${_testname}/screen-output.tmp
         COMMAND ${_replacement_script} screen-output <${CMAKE_CURRENT_BINARY_DIR}/output-${_testname}/screen-output.tmp >${CMAKE_CURRENT_BINARY_DIR}/output-${_testname}/screen-output
         DEPENDS ${ASPECT_BINARY} ${CMAKE_CURRENT_BINARY_DIR}/${_testname}.x.prm ${_testdepends})

@@ -167,15 +167,13 @@ namespace aspect
       const std::map<types::boundary_id, std::pair<std::string,std::vector<std::string> > >
       tmp_active_vel_boundary_indicators = this->get_boundary_velocity_manager().get_active_boundary_velocity_names();
 
-      for (std::map<types::boundary_id, std::pair<std::string, std::vector<std::string> > >::const_iterator p = tmp_active_vel_boundary_indicators.begin();
-           p != tmp_active_vel_boundary_indicators.end(); ++p)
-        velocity_boundary_indicators.insert(p->first);
+      for (const auto &p : tmp_active_vel_boundary_indicators)
+        velocity_boundary_indicators.insert(p.first);
 
       // Get the mesh deformation boundary indicators
       const std::set<types::boundary_id> tmp_mesh_deformation_boundary_indicators = this->get_mesh_deformation_boundary_indicators();
-      for (std::set<types::boundary_id>::const_iterator p = tmp_mesh_deformation_boundary_indicators.begin();
-           p != tmp_mesh_deformation_boundary_indicators.end(); ++p)
-        AssertThrow(velocity_boundary_indicators.find(*p) == velocity_boundary_indicators.end(),
+      for (const auto &p : tmp_mesh_deformation_boundary_indicators)
+        AssertThrow(velocity_boundary_indicators.find(p) == velocity_boundary_indicators.end(),
                     ExcMessage("The free surface mesh deformation plugin cannot be used with the current velocity boundary conditions"));
 
       this->get_signals().set_assemblers.connect(std::bind(&FreeSurface<dim>::set_assemblers,
@@ -236,10 +234,10 @@ namespace aspect
       std::vector<Tensor<1,dim> > velocity_values(n_face_q_points);
 
       // set up constraints
-      ConstraintMatrix mass_matrix_constraints(mesh_locally_relevant);
+      AffineConstraints<double> mass_matrix_constraints(mesh_locally_relevant);
       DoFTools::make_hanging_node_constraints(mesh_deformation_dof_handler, mass_matrix_constraints);
 
-      typedef std::set< std::pair< std::pair<types::boundary_id, types::boundary_id>, unsigned int> > periodic_boundary_pairs;
+      using periodic_boundary_pairs = std::set< std::pair< std::pair<types::boundary_id, types::boundary_id>, unsigned int> >;
       periodic_boundary_pairs pbp = this->get_geometry_model().get_periodic_boundary_pairs();
       for (periodic_boundary_pairs::iterator p = pbp.begin(); p != pbp.end(); ++p)
         DoFTools::make_periodicity_constraints(mesh_deformation_dof_handler,
@@ -366,7 +364,7 @@ namespace aspect
     template <int dim>
     void
     FreeSurface<dim>::compute_velocity_constraints_on_boundary(const DoFHandler<dim> &mesh_deformation_dof_handler,
-                                                               ConstraintMatrix &mesh_velocity_constraints,
+                                                               AffineConstraints<double> &mesh_velocity_constraints,
                                                                const std::set<types::boundary_id> &boundary_id) const
     {
       // For the free surface indicators we constrain the displacement to be v.n

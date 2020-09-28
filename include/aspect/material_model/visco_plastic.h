@@ -26,6 +26,8 @@
 #include <aspect/simulator_access.h>
 #include <aspect/material_model/rheology/diffusion_creep.h>
 #include <aspect/material_model/rheology/dislocation_creep.h>
+#include <aspect/material_model/rheology/frank_kamenetskii.h>
+#include <aspect/material_model/rheology/peierls_creep.h>
 #include <aspect/material_model/rheology/constant_viscosity_prefactors.h>
 #include <aspect/material_model/rheology/drucker_prager.h>
 #include <aspect/material_model/equation_of_state/multicomponent_incompressible.h>
@@ -148,7 +150,7 @@ namespace aspect
      * $\tau$ is the viscous deviatoric stress, $\eta$ is the shear viscosity,
      * $\mu$ is the shear modulus and $\overset{\triangledown}{\tau}$ is the
      * Jaumann corotational stress rate. If plasticity is included the
-     * deviatoric rate of deformation may be writted as:
+     * deviatoric rate of deformation may be written as:
      * $\hat{D} = \hat{D_{e}} + \hat{D_{v}} + \hat{D_{p}}$, where $\hat{D_{p}}$
      * is the plastic component. As defined in the second paragraph, $\hat{D_{p}}$
      * decomposes to $\frac{\tau_{y}}{2\eta_{y}}$, where $\tau_{y}$ is the yield
@@ -253,12 +255,24 @@ namespace aspect
         /**
          * A function that returns whether the material is plastically yielding at
          * the given pressure, temperature, composition, and strain rate.
+         *
+         * @deprecated: Use the other function with this name instead, which allows
+         * to pass in more general input variables.
          */
+        DEAL_II_DEPRECATED
         bool
         is_yielding ( const double &pressure,
                       const double &temperature,
                       const std::vector<double> &composition,
                       const SymmetricTensor<2,dim> &strain_rate) const;
+
+        /**
+        * A function that returns whether the material is plastically yielding at
+        * the given input variables (pressure, temperature, composition, strain rate,
+        * and so on).
+        */
+        bool
+        is_yielding (const MaterialModelInputs<dim> &in) const;
 
       private:
 
@@ -271,7 +285,7 @@ namespace aspect
         std::vector<double> thermal_diffusivities;
 
         /**
-         * Whether to use user-defined thermal conductivites instead of thermal diffusivities.
+         * Whether to use user-defined thermal conductivities instead of thermal diffusivities.
          */
         bool define_conductivities;
 
@@ -292,6 +306,7 @@ namespace aspect
         {
           diffusion,
           dislocation,
+          frank_kamenetskii,
           composite
         } viscous_flow_law;
 
@@ -310,13 +325,12 @@ namespace aspect
          * experience the same strain rate (isostrain).
          */
         std::pair<std::vector<double>, std::vector<bool> >
-        calculate_isostrain_viscosities ( const std::vector<double> &volume_fractions,
-                                          const double &pressure,
-                                          const double &temperature,
-                                          const std::vector<double> &composition,
-                                          const SymmetricTensor<2,dim> &strain_rate,
+        calculate_isostrain_viscosities ( const MaterialModel::MaterialModelInputs<dim> &in,
+                                          const unsigned int i,
+                                          const std::vector<double> &volume_fractions,
                                           const ViscosityScheme &viscous_type,
-                                          const YieldScheme &yield_type) const;
+                                          const YieldScheme &yield_type,
+                                          const std::vector<double> &phase_function_values = std::vector<double>()) const;
 
 
         /**
@@ -339,7 +353,8 @@ namespace aspect
                                            const std::vector<double> &volume_fractions,
                                            const std::vector<double> &composition_viscosities,
                                            const MaterialModel::MaterialModelInputs<dim> &in,
-                                           MaterialModel::MaterialModelOutputs<dim> &out) const;
+                                           MaterialModel::MaterialModelOutputs<dim> &out,
+                                           const std::vector<double> &phase_function_values = std::vector<double>()) const;
 
 
         /**
@@ -364,6 +379,17 @@ namespace aspect
          */
         Rheology::DiffusionCreep<dim> diffusion_creep;
         Rheology::DislocationCreep<dim> dislocation_creep;
+        std::unique_ptr<Rheology::FrankKamenetskii<dim> > frank_kamenetskii_rheology;
+
+        /**
+         * Whether to include peierls creep in the constitutive formulation.
+         */
+        bool use_peierls_creep;
+
+        /**
+         * Objects for computing peierls creep viscosities.
+         */
+        std::unique_ptr<Rheology::PeierlsCreep<dim> > peierls_creep;
 
         /**
          * Object for computing the viscosity multiplied by a constant prefactor.

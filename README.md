@@ -1,7 +1,7 @@
 ASPECT - Advanced Solver for Problems in Earth's ConvecTion
 ===========================================================
 [![License GPL2:](https://img.shields.io/cran/l/devtools.svg)](https://github.com/geodynamics/aspect/blob/master/LICENSE)
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.2653531.svg)](https://doi.org/10.5281/zenodo.2653531)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.3924604.svg)](https://doi.org/10.5281/zenodo.3924604)
 [![pdf manual](https://img.shields.io/badge/get-PDF-green.svg)](https://doi.org/10.6084/m9.figshare.4865333)
 
 About
@@ -81,7 +81,7 @@ For more information see:
    - Timo Heister
    - John Naliboff
 
- - A complete and growing list of the many authors that have contributed over the years can be found at [github](https://github.com/geodynamics/aspect/graphs/contributors)
+ - A complete and growing list of the many authors that have contributed over the years can be found at [GitHub contributors](https://github.com/geodynamics/aspect/graphs/contributors).
  - If you have specific questions about ASPECT that are not suitable for public and archived mailing lists, feel free to contact the maintainers or principal developers.
 
 

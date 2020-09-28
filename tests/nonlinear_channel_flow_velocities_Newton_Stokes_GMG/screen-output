@@ -7,126 +7,126 @@ Number of degrees of freedom: 3,556 (2,178+289+1,089)
 
 *** Timestep 0:  t=0 seconds
    Skipping temperature solve because RHS is zero.
-   Initial Newton Stokes residual = 7.28522e+17, v = 7.28522e+17, p = 0.0770426
+   Initial Newton Stokes residual = 7.28522e+17, v = 7.28522e+17, p = 7.70426e+13
 
-   Solving Stokes system... 12+0 iterations.
+   Solving Stokes system... 13+0 iterations.
       Relative nonlinear residual (total Newton system) after nonlinear iteration 1: 1, norm of the rhs: 7.28522e+17
 
    Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 17+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 2: 0.000225299, norm of the rhs: 1.64135e+14, newton_derivative_scaling_factor: 0
+   Solving Stokes system... 21+0 iterations.
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 2: 3.99101e-07, norm of the rhs: 2.90754e+11, newton_derivative_scaling_factor: 0
 
    Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 14+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 3: 1.12033e-06, norm of the rhs: 8.16186e+11, newton_derivative_scaling_factor: 0
+   Solving Stokes system... 21+0 iterations.
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 3: 2.8973e-07, norm of the rhs: 2.11075e+11, newton_derivative_scaling_factor: 0
 
    Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 4: 3.97319e-07, norm of the rhs: 2.89456e+11, newton_derivative_scaling_factor: 0
+   Solving Stokes system... 22+0 iterations.
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 4: 2.16364e-07, norm of the rhs: 1.57626e+11, newton_derivative_scaling_factor: 0
 
    Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 17+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 5: 2.89221e-07, norm of the rhs: 2.10704e+11, newton_derivative_scaling_factor: 0
+   Solving Stokes system... 22+0 iterations.
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 5: 1.51585e-07, norm of the rhs: 1.10433e+11, newton_derivative_scaling_factor: 0
 
    Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 18+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 6: 2.16061e-07, norm of the rhs: 1.57405e+11, newton_derivative_scaling_factor: 0
+   Solving Stokes system... 22+0 iterations.
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 6: 1.03212e-07, norm of the rhs: 7.51925e+10, newton_derivative_scaling_factor: 0
 
    Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 18+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 7: 1.5128e-07, norm of the rhs: 1.10211e+11, newton_derivative_scaling_factor: 0
+   Solving Stokes system... 22+0 iterations.
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 7: 6.82614e-08, norm of the rhs: 4.973e+10, newton_derivative_scaling_factor: 0
 
    Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 19+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 8: 1.03044e-07, norm of the rhs: 7.507e+10, newton_derivative_scaling_factor: 0
+   Solving Stokes system... 22+0 iterations.
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 8: 4.40443e-08, norm of the rhs: 3.20873e+10, newton_derivative_scaling_factor: 0
 
    Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 18+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 9: 6.81773e-08, norm of the rhs: 4.96687e+10, newton_derivative_scaling_factor: 0
+   Solving Stokes system... 22+0 iterations.
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 9: 2.79509e-08, norm of the rhs: 2.03629e+10, newton_derivative_scaling_factor: 0
 
    Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 18+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 10: 4.39929e-08, norm of the rhs: 3.20498e+10, newton_derivative_scaling_factor: 0
+   Solving Stokes system... 22+0 iterations.
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 10: 1.76889e-08, norm of the rhs: 1.28868e+10, newton_derivative_scaling_factor: 0
 
    Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 18+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 11: 2.79122e-08, norm of the rhs: 2.03347e+10, newton_derivative_scaling_factor: 0
+   Solving Stokes system... 22+0 iterations.
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 11: 1.12924e-08, norm of the rhs: 8.22673e+09, newton_derivative_scaling_factor: 0
 
    Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 18+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 12: 1.76579e-08, norm of the rhs: 1.28642e+10, newton_derivative_scaling_factor: 0
+   Solving Stokes system... 22+0 iterations.
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 12: 7.26073e-09, norm of the rhs: 5.28961e+09, newton_derivative_scaling_factor: 0
 
    Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 18+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 13: 1.12683e-08, norm of the rhs: 8.2092e+09, newton_derivative_scaling_factor: 0
+   Solving Stokes system... 22+0 iterations.
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 13: 4.68838e-09, norm of the rhs: 3.41559e+09, newton_derivative_scaling_factor: 0
 
    Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 18+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 14: 7.24263e-09, norm of the rhs: 5.27642e+09, newton_derivative_scaling_factor: 0
+   Solving Stokes system... 22+0 iterations.
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 14: 3.03819e-09, norm of the rhs: 2.21339e+09, newton_derivative_scaling_factor: 0
 
    Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 18+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 15: 4.67508e-09, norm of the rhs: 3.4059e+09, newton_derivative_scaling_factor: 0
+   Solving Stokes system... 22+0 iterations.
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 15: 1.97527e-09, norm of the rhs: 1.43903e+09, newton_derivative_scaling_factor: 0
 
    Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 17+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 16: 3.0286e-09, norm of the rhs: 2.2064e+09, newton_derivative_scaling_factor: 0
+   Solving Stokes system... 22+0 iterations.
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 16: 1.28784e-09, norm of the rhs: 9.3822e+08, newton_derivative_scaling_factor: 0
 
    Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 17+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 17: 1.96847e-09, norm of the rhs: 1.43407e+09, newton_derivative_scaling_factor: 0
+   Solving Stokes system... 22+0 iterations.
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 17: 8.41616e-10, norm of the rhs: 6.13136e+08, newton_derivative_scaling_factor: 0
 
    Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 17+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 18: 1.28308e-09, norm of the rhs: 9.3475e+08, newton_derivative_scaling_factor: 0
+   Solving Stokes system... 22+0 iterations.
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 18: 5.51069e-10, norm of the rhs: 4.01466e+08, newton_derivative_scaling_factor: 0
 
    Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 17+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 19: 8.38315e-10, norm of the rhs: 6.10731e+08, newton_derivative_scaling_factor: 0
+   Solving Stokes system... 22+0 iterations.
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 19: 3.61411e-10, norm of the rhs: 2.63296e+08, newton_derivative_scaling_factor: 0
 
    Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 17+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 20: 5.488e-10, norm of the rhs: 3.99813e+08, newton_derivative_scaling_factor: 0
+   Solving Stokes system... 22+0 iterations.
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 20: 2.37355e-10, norm of the rhs: 1.72918e+08, newton_derivative_scaling_factor: 0
 
    Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 17+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 21: 3.59862e-10, norm of the rhs: 2.62167e+08, newton_derivative_scaling_factor: 0
+   Solving Stokes system... 21+0 iterations.
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 21: 1.56069e-10, norm of the rhs: 1.13699e+08, newton_derivative_scaling_factor: 0
 
    Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 22: 2.36302e-10, norm of the rhs: 1.72151e+08, newton_derivative_scaling_factor: 0
+   Solving Stokes system... 21+0 iterations.
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 22: 1.02729e-10, norm of the rhs: 7.48405e+07, newton_derivative_scaling_factor: 0
 
    Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 23: 1.55357e-10, norm of the rhs: 1.13181e+08, newton_derivative_scaling_factor: 0
+   Solving Stokes system... 21+0 iterations.
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 23: 6.76835e-11, norm of the rhs: 4.93089e+07, newton_derivative_scaling_factor: 0
 
    Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 24: 1.02249e-10, norm of the rhs: 7.44908e+07, newton_derivative_scaling_factor: 0
+   Solving Stokes system... 21+0 iterations.
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 24: 4.46315e-11, norm of the rhs: 3.2515e+07, newton_derivative_scaling_factor: 0
 
    Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 25: 6.73609e-11, norm of the rhs: 4.90739e+07, newton_derivative_scaling_factor: 0
+   Solving Stokes system... 21+0 iterations.
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 25: 2.94533e-11, norm of the rhs: 2.14574e+07, newton_derivative_scaling_factor: 0
 
    Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 26: 4.44151e-11, norm of the rhs: 3.23574e+07, newton_derivative_scaling_factor: 0
+   Solving Stokes system... 21+0 iterations.
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 26: 1.94504e-11, norm of the rhs: 1.41701e+07, newton_derivative_scaling_factor: 0
 
    Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 27: 2.93085e-11, norm of the rhs: 2.13519e+07, newton_derivative_scaling_factor: 0
+   Solving Stokes system... 21+0 iterations.
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 27: 1.28528e-11, norm of the rhs: 9.36358e+06, newton_derivative_scaling_factor: 0
 
    Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 28: 1.93536e-11, norm of the rhs: 1.40995e+07, newton_derivative_scaling_factor: 0
+   Solving Stokes system... 21+0 iterations.
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 28: 8.49804e-12, norm of the rhs: 6.19101e+06, newton_derivative_scaling_factor: 0
 
    Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 29: 1.27882e-11, norm of the rhs: 9.3165e+06, newton_derivative_scaling_factor: 0
+   Solving Stokes system... 21+0 iterations.
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 29: 5.62167e-12, norm of the rhs: 4.09551e+06, newton_derivative_scaling_factor: 0
 
    Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 30: 8.45493e-12, norm of the rhs: 6.15961e+06, newton_derivative_scaling_factor: 0
+   Solving Stokes system... 21+0 iterations.
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 30: 3.72064e-12, norm of the rhs: 2.71057e+06, newton_derivative_scaling_factor: 0
 
 
    Postprocessing:
@@ -136,78 +136,30 @@ Number of degrees of freedom: 3,556 (2,178+289+1,089)
 
 *** Timestep 1:  t=1 seconds
    Skipping temperature solve because RHS is zero.
-   Initial Newton Stokes residual = 7.28522e+17, v = 7.28522e+17, p = 0.0770426
+   Initial Newton Stokes residual = 7.28522e+17, v = 7.28522e+17, p = 7.70426e+13
 
    Solving Stokes system... 0+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 1: 8.45493e-12, norm of the rhs: 6.15961e+06
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 1: 3.72064e-12, norm of the rhs: 2.71057e+06
 
    Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 2: 5.59294e-12, norm of the rhs: 4.07458e+06, newton_derivative_scaling_factor: 0
+   Solving Stokes system... 21+0 iterations.
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 2: 2.46353e-12, norm of the rhs: 1.79473e+06, newton_derivative_scaling_factor: 0
 
    Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 3: 3.70151e-12, norm of the rhs: 2.69663e+06, newton_derivative_scaling_factor: 0
+   Solving Stokes system... 21+0 iterations.
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 3: 1.6318e-12, norm of the rhs: 1.1888e+06, newton_derivative_scaling_factor: 0
 
    Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 4: 2.45079e-12, norm of the rhs: 1.78545e+06, newton_derivative_scaling_factor: 0
+   Solving Stokes system... 21+0 iterations.
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 4: 1.08126e-12, norm of the rhs: 787722, newton_derivative_scaling_factor: 0
 
    Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 5: 1.62332e-12, norm of the rhs: 1.18263e+06, newton_derivative_scaling_factor: 0
+   Solving Stokes system... 21+0 iterations.
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 5: 7.16693e-13, norm of the rhs: 522127, newton_derivative_scaling_factor: 0
 
    Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 6: 1.07562e-12, norm of the rhs: 783613, newton_derivative_scaling_factor: 0
-
-   Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 7: 7.12941e-13, norm of the rhs: 519393, newton_derivative_scaling_factor: 0
-
-   Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 8: 4.72689e-13, norm of the rhs: 344365, newton_derivative_scaling_factor: 0
-
-   Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 9: 3.13483e-13, norm of the rhs: 228379, newton_derivative_scaling_factor: 0
-
-   Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 10: 2.07949e-13, norm of the rhs: 151495, newton_derivative_scaling_factor: 0
-
-   Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 11: 1.37972e-13, norm of the rhs: 100516, newton_derivative_scaling_factor: 0
-
-   Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 12: 9.1562e-14, norm of the rhs: 66704.9, newton_derivative_scaling_factor: 0
-
-   Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 13: 6.07737e-14, norm of the rhs: 44275, newton_derivative_scaling_factor: 0
-
-   Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 14: 4.03439e-14, norm of the rhs: 29391.4, newton_derivative_scaling_factor: 0
-
-   Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 15: 2.6787e-14, norm of the rhs: 19514.9, newton_derivative_scaling_factor: 0
-
-   Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 16: 1.77871e-14, norm of the rhs: 12958.3, newton_derivative_scaling_factor: 0
-
-   Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 17: 1.18129e-14, norm of the rhs: 8605.95, newton_derivative_scaling_factor: 0
-
-   Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 18: 7.84579e-15, norm of the rhs: 5715.83, newton_derivative_scaling_factor: 0
+   Solving Stokes system... 21+0 iterations.
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 6: 4.75185e-13, norm of the rhs: 346183, newton_derivative_scaling_factor: 0
 
 
    Postprocessing:
@@ -217,78 +169,30 @@ Number of degrees of freedom: 3,556 (2,178+289+1,089)
 
 *** Timestep 2:  t=2 seconds
    Skipping temperature solve because RHS is zero.
-   Initial Newton Stokes residual = 7.28522e+17, v = 7.28522e+17, p = 0.0770426
+   Initial Newton Stokes residual = 7.28522e+17, v = 7.28522e+17, p = 7.70426e+13
 
    Solving Stokes system... 0+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 1: 8.43996e-12, norm of the rhs: 6.1487e+06
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 1: 2.77156e-12, norm of the rhs: 2.01914e+06
 
    Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 2: 5.58307e-12, norm of the rhs: 4.06739e+06, newton_derivative_scaling_factor: 0
+   Solving Stokes system... 21+0 iterations.
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 2: 1.834e-12, norm of the rhs: 1.33611e+06, newton_derivative_scaling_factor: 0
 
    Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 3: 3.69497e-12, norm of the rhs: 2.69187e+06, newton_derivative_scaling_factor: 0
+   Solving Stokes system... 21+0 iterations.
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 3: 1.21414e-12, norm of the rhs: 884530, newton_derivative_scaling_factor: 0
 
    Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 4: 2.44645e-12, norm of the rhs: 1.7823e+06, newton_derivative_scaling_factor: 0
+   Solving Stokes system... 21+0 iterations.
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 4: 8.0411e-13, norm of the rhs: 585812, newton_derivative_scaling_factor: 0
 
    Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 5: 1.62044e-12, norm of the rhs: 1.18053e+06, newton_derivative_scaling_factor: 0
+   Solving Stokes system... 21+0 iterations.
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 5: 5.32748e-13, norm of the rhs: 388119, newton_derivative_scaling_factor: 0
 
    Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 6: 1.07371e-12, norm of the rhs: 782222, newton_derivative_scaling_factor: 0
-
-   Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 7: 7.11672e-13, norm of the rhs: 518469, newton_derivative_scaling_factor: 0
-
-   Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 8: 4.71846e-13, norm of the rhs: 343751, newton_derivative_scaling_factor: 0
-
-   Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 9: 3.12923e-13, norm of the rhs: 227971, newton_derivative_scaling_factor: 0
-
-   Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 10: 2.07576e-13, norm of the rhs: 151224, newton_derivative_scaling_factor: 0
-
-   Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 11: 1.37725e-13, norm of the rhs: 100336, newton_derivative_scaling_factor: 0
-
-   Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 12: 9.13974e-14, norm of the rhs: 66585.1, newton_derivative_scaling_factor: 0
-
-   Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 13: 6.06641e-14, norm of the rhs: 44195.1, newton_derivative_scaling_factor: 0
-
-   Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 14: 4.0272e-14, norm of the rhs: 29339.1, newton_derivative_scaling_factor: 0
-
-   Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 15: 2.67386e-14, norm of the rhs: 19479.7, newton_derivative_scaling_factor: 0
-
-   Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 16: 1.77551e-14, norm of the rhs: 12935, newton_derivative_scaling_factor: 0
-
-   Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 17: 1.17915e-14, norm of the rhs: 8590.35, newton_derivative_scaling_factor: 0
-
-   Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 18: 7.83175e-15, norm of the rhs: 5705.6, newton_derivative_scaling_factor: 0
+   Solving Stokes system... 21+0 iterations.
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 6: 3.53081e-13, norm of the rhs: 257227, newton_derivative_scaling_factor: 0
 
 
    Postprocessing:
@@ -298,22 +202,22 @@ Number of degrees of freedom: 3,556 (2,178+289+1,089)
 
 *** Timestep 3:  t=3 seconds
    Skipping temperature solve because RHS is zero.
-   Initial Newton Stokes residual = 7.28522e+17, v = 7.28522e+17, p = 0.0770426
+   Initial Newton Stokes residual = 7.28522e+17, v = 7.28522e+17, p = 7.70426e+13
 
    Solving Stokes system... 0+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 1: 2.35105e-14, norm of the rhs: 17127.9
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 1: 1.18134e-12, norm of the rhs: 860631
 
    Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 2: 1.56161e-14, norm of the rhs: 11376.6, newton_derivative_scaling_factor: 0
+   Solving Stokes system... 21+0 iterations.
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 2: 7.8329e-13, norm of the rhs: 570644, newton_derivative_scaling_factor: 0
 
    Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 3: 1.03739e-14, norm of the rhs: 7557.65, newton_derivative_scaling_factor: 0
+   Solving Stokes system... 21+0 iterations.
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 3: 5.19499e-13, norm of the rhs: 378466, newton_derivative_scaling_factor: 0
 
    Skipping temperature solve because RHS is zero.
-   Solving Stokes system... 16+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 4: 6.89205e-15, norm of the rhs: 5021.01, newton_derivative_scaling_factor: 0
+   Solving Stokes system... 21+0 iterations.
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 4: 3.44626e-13, norm of the rhs: 251068, newton_derivative_scaling_factor: 0
 
 
    Postprocessing:
@@ -323,10 +227,10 @@ Number of degrees of freedom: 3,556 (2,178+289+1,089)
 
 *** Timestep 4:  t=4 seconds
    Skipping temperature solve because RHS is zero.
-   Initial Newton Stokes residual = 7.28522e+17, v = 7.28522e+17, p = 0.0770426
+   Initial Newton Stokes residual = 7.28522e+17, v = 7.28522e+17, p = 7.70426e+13
 
    Solving Stokes system... 0+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 1: 5.95424e-15, norm of the rhs: 4337.79
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 1: 3.36394e-13, norm of the rhs: 245070
 
 
    Postprocessing:

@@ -95,7 +95,7 @@ namespace aspect
                            Patterns::Selection("File|Value"),
                            "Method that is used to specify the depth of the lithosphere-asthenosphere boundary.");
         prm.declare_entry ("Maximum lithosphere depth", "200000.0",
-                           Patterns::Double (0.),"Units: m."
+                           Patterns::Double (0.),"Units: \\si{\\meter}."
                            "The maximum depth of the lithosphere. The model will be "
                            "NaNs below this depth.");
         prm.declare_entry ("Data directory", "$ASPECT_SOURCE_DIR/data/initial-temperature/lithosphere-mask/",
@@ -213,10 +213,10 @@ namespace aspect
                                               "lithosphere-asthenosphere boundary (specified by an ascii file "
                                               "or maximum lithosphere depth value). Below this the initial temperature is set as "
                                               "NaN.  Note the required format of the input data file: The first lines may "
-                                              "contain any number of comments if they begin with ‘#’, but one of these lines "
-                                              "needs to contain the number of grid points in each dimension as for example"
-                                              "‘# POINTS: 3 3’. For a spherical model, the order of the data columns has to be"
-                                              "'phi', 'theta','depth (m)', where phi is the  azimuth angle and theta is the "
+                                              "contain any number of comments if they begin with '#', but one of these lines "
+                                              "needs to contain the number of grid points in each dimension as for example "
+                                              "'# POINTS: 3 3'. For a spherical model, the order of the data columns has to be "
+                                              "'phi', 'theta', 'depth (m)', where phi is the azimuth angle and theta is the "
                                               "polar angle measured positive from the north pole. This plug-in can be combined "
                                               "with another using the 'replace if valid' operator. ")
   }

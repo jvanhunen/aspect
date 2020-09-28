@@ -297,7 +297,7 @@ namespace aspect
       virtual void setup_dofs()=0;
 
       /**
-       * Evalute the MaterialModel to query for the viscosity on the active cells,
+       * Evaluate the MaterialModel to query for the viscosity on the active cells,
        * project this viscosity to the multigrid hierarchy, and cache the information
        * for later usage. Also sets pressure scaling and information regarding the
        * compressiblity of the flow.
@@ -305,7 +305,10 @@ namespace aspect
       virtual void evaluate_material_model()=0;
 
       /**
-       * Add correction to system RHS for non-zero boundary condition.
+       * Add correction to system RHS for non-zero boundary condition. For more information
+       * on exactly what this correction is and why it is computed, see the deal.II tutorial
+       * step 50 section "LaplaceProblem::assemble_rhs()":
+       * https://www.dealii.org/developer/doxygen/deal.II/step_50.html#LaplaceProblemassemble_rhs
        */
       virtual void correct_stokes_rhs()=0;
 
@@ -346,14 +349,14 @@ namespace aspect
        * Return a pointer to the object that describes the velocity DoF
        * constraints for the block GMG Stokes solver.
        */
-      virtual const ConstraintMatrix &
+      virtual const AffineConstraints<double> &
       get_constraints_v () const = 0;
 
       /**
        * Return a pointer to the object that describes the pressure DoF
        * constraints for the block GMG Stokes solver.
        */
-      virtual const ConstraintMatrix &
+      virtual const AffineConstraints<double> &
       get_constraints_p () const = 0;
 
       /**
@@ -425,15 +428,16 @@ namespace aspect
       void setup_dofs() override;
 
       /**
-       * Evalute the MaterialModel to query for the viscosity on the active cells,
+       * Evaluate the MaterialModel to query for the viscosity on the active cells,
        * project this viscosity to the multigrid hierarchy, and cache the information
        * for later usage. Also sets pressure scaling and information regarding the
-       * compressiblity of the flow.
+       * compressibility of the flow.
        */
       void evaluate_material_model() override;
 
       /**
-       * Add correction to system RHS for non-zero boundary condition.
+       * Add correction to system RHS for non-zero boundary condition. See description in
+       * StokesMatrixFreeHandler::correct_stokes_rhs() for more information.
        */
       void correct_stokes_rhs() override;
 
@@ -442,12 +446,6 @@ namespace aspect
        * operators on each level for the purpose of smoothing inside the multigrid v-cycle.
        */
       void build_preconditioner() override;
-
-      /**
-       * Get the workload imbalance of the distribution
-       * of the level hierarchy.
-       */
-      double get_workload_imbalance();
 
       /**
        * Declare parameters. (No actual parameters at the moment).
@@ -480,14 +478,14 @@ namespace aspect
        * Return a pointer to the object that describes the velocity DoF
        * constraints for the block GMG Stokes solver.
        */
-      const ConstraintMatrix &
+      const AffineConstraints<double> &
       get_constraints_v () const override;
 
       /**
        * Return a pointer to the object that describes the pressure DoF
        * constraints for the block GMG Stokes solver.
        */
-      const ConstraintMatrix &
+      const AffineConstraints<double> &
       get_constraints_p () const override;
 
       /**
@@ -542,16 +540,16 @@ namespace aspect
       // and build_preconditioner(). It will be deleted after the last use.
       MGLevelObject<dealii::LinearAlgebra::distributed::Vector<double> > level_viscosity_vector;
 
-      typedef MatrixFreeStokesOperators::StokesOperator<dim,velocity_degree,double> StokesMatrixType;
-      typedef MatrixFreeStokesOperators::MassMatrixOperator<dim,velocity_degree-1,double> SchurComplementMatrixType;
-      typedef MatrixFreeStokesOperators::ABlockOperator<dim,velocity_degree,double> ABlockMatrixType;
+      using StokesMatrixType = MatrixFreeStokesOperators::StokesOperator<dim,velocity_degree,double>;
+      using SchurComplementMatrixType = MatrixFreeStokesOperators::MassMatrixOperator<dim,velocity_degree-1,double>;
+      using ABlockMatrixType = MatrixFreeStokesOperators::ABlockOperator<dim,velocity_degree,double>;
 
       StokesMatrixType stokes_matrix;
       ABlockMatrixType A_block_matrix;
       SchurComplementMatrixType Schur_complement_block_matrix;
 
-      ConstraintMatrix constraints_v;
-      ConstraintMatrix constraints_p;
+      AffineConstraints<double> constraints_v;
+      AffineConstraints<double> constraints_p;
 
       MGLevelObject<ABlockMatrixType> mg_matrices_A_block;
       MGLevelObject<SchurComplementMatrixType> mg_matrices_Schur_complement;

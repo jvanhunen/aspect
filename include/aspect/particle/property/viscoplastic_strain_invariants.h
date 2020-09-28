@@ -61,14 +61,14 @@ namespace aspect
                                             std::vector<double> &particle_properties) const override;
 
           /**
-          * @copydoc aspect::Particle::Property::Interface::update_one_particle_property()
+          * @copydoc aspect::Particle::Property::Interface::update_particle_property()
           **/
+          virtual
           void
-          update_one_particle_property (const unsigned int data_position,
-                                        const Point<dim> &position,
-                                        const Vector<double> &solution,
-                                        const std::vector<Tensor<1,dim> > &gradients,
-                                        const ArrayView<double> &particle_properties) const override;
+          update_particle_property (const unsigned int data_position,
+                                    const Vector<double> &solution,
+                                    const std::vector<Tensor<1,dim> > &gradients,
+                                    typename ParticleHandler<dim>::particle_iterator &particle) const override;
 
           /**
           * @copydoc aspect::Particle::Property::Interface::need_update()
@@ -91,6 +91,16 @@ namespace aspect
         private:
           unsigned int n_components;
 
+          /**
+           * An object that is used to compute the particle property. Since the
+           * object is expensive to create and is needed often it is kept as a
+           * member variable. Because it is changed inside a const member function
+           * (update_particle_property) it has to be mutable, but since it is
+           * only used inside that function and always set before being used
+           * that is not a problem. This implementation is not thread safe,
+           * but it is currently not used in a threaded context.
+           */
+          mutable MaterialModel::MaterialModelInputs<dim> material_inputs;
       };
     }
   }

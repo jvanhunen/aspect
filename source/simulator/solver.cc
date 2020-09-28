@@ -376,7 +376,7 @@ namespace aspect
   namespace
   {
     void linear_solver_failed(const std::string &solver_name,
-                              const std::string output_filename,
+                              const std::string &output_filename,
                               const std::vector<SolverControl> &solver_controls,
                               const std::exception &exc)
     {
@@ -475,7 +475,7 @@ namespace aspect
       }
 
     // Create distributed vector (we need all blocks here even though we only
-    // solve for the current block) because only have a ConstraintMatrix
+    // solve for the current block) because only have a AffineConstraints<double>
     // for the whole system, current_linearization_point contains our initial guess.
     LinearAlgebra::BlockVector distributed_solution (
       introspection.index_sets.system_partitioning,
@@ -971,4 +971,6 @@ namespace aspect
   template std::pair<double,double> Simulator<dim>::solve_stokes ();
 
   ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
 }

@@ -112,11 +112,12 @@ inclusion/: dummy
 nonlinear_channel_flow/: dummy
 	+@$(def); make_lib $@
 
-# todo: spiegelman
 newton_solver_benchmark_set/: dummy nonlinear_channel_flow/ tosi_et_al_2015_gcubed/
 	+@$(def); make_lib $@/nonlinear_channel_flow
 	@$(def); run_prm $@/nonlinear_channel_flow "input_v.prm"
 	@$(def); run_all_prms $@/tosi_et_al_2015
+	+@$(def); make_lib $@/spiegelman_et_al_2016
+	@$(def); run_prm $@/spiegelman_et_al_2016 "input.prm"
 
 
 # TODO: prm doesn't run without replacing values:
@@ -129,10 +130,18 @@ operator_splitting/: dummy
 	+@$(def); make_lib $@/exponential_decay
 	@$(def); run_all_prms $@/exponential_decay
 
+rayleigh_taylor_instability/: dummy
+	+@$(def); make_lib $@
+	@$(def); run_prm $@ rayleigh_taylor_instability.prm
+
 rigid_shear/: dummy
 	+@$(def); make_lib $@/plugin
 	@$(def); run_all_prms $@/instantaneous
 	@$(def); run_all_prms $@/time-dependent
+
+sinking_block/: dummy
+	+@$(def); make_lib $@
+	@$(def); run_prm $@ sinking_block.prm
 
 solcx/: dummy
 	+@$(def); make_lib $@
@@ -164,6 +173,3 @@ compressibility_formulations/: dummy
 	@$(def); run_prm $@/lateral_pipe_transient lateral_pipe.prm
 	@$(def); run_prm $@/vertical_pipe vertical_pipe.prm
 
-#https://github.com/geodynamics/aspect/issues/3534
-viscosity_grooves/: dummy
-	echo "TODO"

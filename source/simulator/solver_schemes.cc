@@ -375,7 +375,7 @@ namespace aspect
 
   template <int dim>
   void Simulator<dim>::assemble_and_solve_defect_correction_Stokes(DefectCorrectionResiduals &dcr,
-                                                                   bool use_picard)
+                                                                   const bool use_picard)
   {
     // The matrix-free GMG Stokes preconditioner is currently not implemented for the Newton solver.
     if (stokes_matrix_free)
@@ -409,6 +409,7 @@ namespace aspect
       {
         dcr.initial_residual = compute_initial_newton_residual(linearized_stokes_initial_guess);
         dcr.switch_initial_residual = dcr.initial_residual;
+        dcr.residual_old = dcr.initial_residual;
         dcr.residual = dcr.initial_residual;
       }
 
@@ -431,24 +432,41 @@ namespace aspect
         compute_current_constraints ();
       }
 
-    // the Stokes matrix depends on the viscosity. if the viscosity
-    // depends on other solution variables, then after we need to
-    // update the Stokes matrix in every time step and so need to set
-    // the following flag. if we change the Stokes matrix we also
-    // need to update the Stokes preconditioner.
-    rebuild_stokes_matrix = rebuild_stokes_preconditioner = assemble_newton_stokes_matrix = true;
+    // If the Stokes matrix depends on the solution, or we have active
+    // velocity boundary conditions, we need to re-assemble the system matrix
+    // (and preconditioner) every time. If we have active boundary conditions,
+    // they could a) depend on the solution, or b) be inhomogeneous. In both
+    // cases, just assembling the RHS will be incorrect.  If no active
+    // boundaries exist, we only have no-slip or free slip conditions, so we
+    // don't need to force assembly of the matrix.
+    if (stokes_matrix_depends_on_solution()
+        ||
+        nonlinear_iteration == 0)
+      rebuild_stokes_matrix = rebuild_stokes_preconditioner = assemble_newton_stokes_matrix = true;
+    else if (parameters.enable_prescribed_dilation)
+      // The dilation requires the Stokes matrix (which is on the rhs
+      // in the Newton solver) to be updated.
+      rebuild_stokes_matrix = true;
 
     assemble_stokes_system();
+
+    // recompute rhs
+    dcr.velocity_residual = system_rhs.block(introspection.block_indices.velocities).l2_norm();
+    dcr.pressure_residual = system_rhs.block(introspection.block_indices.pressure).l2_norm();
+    dcr.residual = std::sqrt(dcr.velocity_residual * dcr.velocity_residual + dcr.pressure_residual * dcr.pressure_residual);
+
+    // Test whether the rhs has dropped so much that we can assume that the iteration is done.
+    if (dcr.residual < dcr.residual_old * 1e-8)
+      {
+        pcout << "   Nonlinear residual reduction has been very large (" << dcr.residual/dcr.residual_old << "); skipping Stokes solve" << std::endl;
+        return;
+      }
 
     /**
      * Eisenstat Walker method for determining the tolerance
      */
     if (nonlinear_iteration > 1)
       {
-        dcr.velocity_residual = system_rhs.block(introspection.block_indices.velocities).l2_norm();
-        dcr.pressure_residual = system_rhs.block(introspection.block_indices.pressure).l2_norm();
-        dcr.residual = std::sqrt(dcr.velocity_residual * dcr.velocity_residual + dcr.pressure_residual * dcr.pressure_residual);
-
         if (!use_picard || newton_handler->parameters.use_Eisenstat_Walker_method_for_Picard_iterations)
           {
             const bool EisenstatWalkerChoiceOne = true;
@@ -492,12 +510,28 @@ namespace aspect
         catch (...)
           {
             // start the solve over again and try with a stabilized version
-            pcout << "Solve failed and catched, try again with stabilisation" << std::endl;
+            pcout << "failed, trying again with stabilization" << std::endl;
             newton_handler->parameters.preconditioner_stabilization = Newton::Parameters::Stabilization::SPD;
             newton_handler->parameters.velocity_block_stabilization = Newton::Parameters::Stabilization::SPD;
-            rebuild_stokes_matrix = rebuild_stokes_preconditioner = assemble_newton_stokes_matrix = true;
+
+            // If the Stokes matrix depends on the solution, or we have active
+            // velocity boundary conditions, we need to re-assemble the system matrix
+            // (and preconditioner) every time. If we have active boundary conditions,
+            // they could a) depend on the solution, or b) be inhomogeneous. In both
+            // cases, just assembling the RHS will be incorrect.  If no active
+            // boundaries exist, we only have no-slip or free slip conditions, so we
+            // don't need to force assembly of the matrix.
+            if (stokes_matrix_depends_on_solution()
+                ||
+                (nonlinear_iteration == 0 && boundary_velocity_manager.get_active_boundary_velocity_conditions().size() > 0))
+              rebuild_stokes_matrix = rebuild_stokes_preconditioner = assemble_newton_stokes_matrix = true;
+            else if (parameters.enable_prescribed_dilation)
+              // The dilation requires the Stokes matrix (which is on the rhs
+              // in the Newton solver) to be updated.
+              rebuild_stokes_matrix = true;
 
             assemble_stokes_system();
+
             /**
              * Eisenstat Walker method for determining the tolerance
              */
@@ -549,7 +583,6 @@ namespace aspect
 
         pcout << "      Relative nonlinear residual (total Newton system) after nonlinear iteration " << nonlinear_iteration+1
               << ": " << dcr.stokes_residuals.first/dcr.initial_residual << ", norm of the rhs: " << dcr.stokes_residuals.first << std::endl;
-
       }
     else
       {
@@ -568,7 +601,7 @@ namespace aspect
 
         double test_velocity_residual = 0;
         double test_pressure_residual = 0;
-        double lambda = 1;
+        double step_length_factor = 1;
         double alpha = 1e-4;
         unsigned int line_search_iteration = 0;
 
@@ -584,14 +617,15 @@ namespace aspect
             current_linearization_point.block(introspection.block_indices.velocities) = backup_linearization_point.block(introspection.block_indices.velocities);
 
             LinearAlgebra::BlockVector search_direction = solution;
-            search_direction *= lambda;
+            search_direction *= step_length_factor;
 
             current_linearization_point.block(introspection.block_indices.pressure) += search_direction.block(introspection.block_indices.pressure);
             current_linearization_point.block(introspection.block_indices.velocities) += search_direction.block(introspection.block_indices.velocities);
 
             // Rebuild the rhs to determine the new residual.
             assemble_newton_stokes_matrix = rebuild_stokes_preconditioner = false;
-            rebuild_stokes_matrix = boundary_velocity_manager.get_active_boundary_velocity_conditions().size()!=0;
+            rebuild_stokes_matrix = (boundary_velocity_manager.get_active_boundary_velocity_conditions().empty()
+                                     == false);
 
             assemble_stokes_system();
 
@@ -601,7 +635,7 @@ namespace aspect
                                       + test_pressure_residual * test_pressure_residual);
 
             // Determine if the decrease is sufficient.
-            if (test_residual < (1.0 - alpha * lambda) * dcr.residual
+            if (test_residual < (1.0 - alpha * step_length_factor) * dcr.residual
                 ||
                 line_search_iteration >= newton_handler->parameters.max_newton_line_search_iterations
                 ||
@@ -618,17 +652,17 @@ namespace aspect
               {
 
                 pcout << "   Line search iteration " << line_search_iteration << ", with norm of the rhs "
-                      << test_residual << " and going to " << (1.0 - alpha * lambda) * dcr.residual
+                      << test_residual << " and going to " << (1.0 - alpha * step_length_factor) * dcr.residual
                       << ", relative residual: " << test_residual/dcr.initial_residual << std::endl;
 
                 /**
                  * The line search step was not sufficient to decrease the residual
                  * enough, so we take a smaller step to see if it improves the residual.
                  */
-                lambda *= (2.0/3.0);// TODO: make a parameter out of this.
+                step_length_factor *= (2.0/3.0);// TODO: make a parameter out of this.
               }
 
-            line_search_iteration++;
+            ++line_search_iteration;
             Assert(line_search_iteration <= newton_handler->parameters.max_newton_line_search_iterations,
                    ExcMessage ("This tests the while condition. This condition should "
                                "actually never be false, because the break statement "
@@ -663,7 +697,6 @@ namespace aspect
 
     dcr.residual_old = dcr.residual;
 
-    pcout << std::endl;
     if (nonlinear_iteration != 0)
       last_pressure_normalization_adjustment = normalize_pressure(current_linearization_point);
   }
@@ -678,6 +711,12 @@ namespace aspect
 
     if (parameters.run_postprocessors_on_nonlinear_iterations)
       postprocess ();
+
+    // Setup a nonlinear solver control that only allows a single iteration
+    SolverControl nonlinear_solver_control(1,1.0);
+    // Announce that we did a single iteration, and assume we have converged
+    nonlinear_solver_control.check(1,0.0);
+    signals.post_nonlinear_solver(nonlinear_solver_control);
   }
 
 
@@ -694,26 +733,263 @@ namespace aspect
                parameters.max_nonlinear_iterations_in_prerefinement)
       :
       parameters.max_nonlinear_iterations;
+
+    SolverControl nonlinear_solver_control(max_nonlinear_iterations,
+                                           parameters.nonlinear_tolerance);
+
+    double relative_residual = std::numeric_limits<double>::max();
+    nonlinear_iteration = 0;
     do
       {
-        const double relative_nonlinear_stokes_residual =
+        relative_residual =
           assemble_and_solve_stokes(nonlinear_iteration == 0, &initial_stokes_residual);
 
         pcout << "      Relative nonlinear residual (Stokes system) after nonlinear iteration " << nonlinear_iteration+1
-              << ": " << relative_nonlinear_stokes_residual
+              << ": " << relative_residual
               << std::endl
               << std::endl;
 
         if (parameters.run_postprocessors_on_nonlinear_iterations)
           postprocess ();
 
-        if (relative_nonlinear_stokes_residual < parameters.nonlinear_tolerance)
-          break;
+        ++nonlinear_iteration;
+      }
+    while (nonlinear_solver_control.check(nonlinear_iteration, relative_residual) == SolverControl::iterate);
+
+    signals.post_nonlinear_solver(nonlinear_solver_control);
+  }
+
+  template <int dim>
+  void Simulator<dim>::solve_no_advection_iterated_defect_correction_stokes ()
+  {
+    // Now store the linear_tolerance we started out with, because we might change
+    // it within this timestep.
+    const double begin_linear_tolerance = parameters.linear_stokes_solver_tolerance;
+
+    DefectCorrectionResiduals dcr;
+    dcr.initial_residual = 1;
+
+    dcr.velocity_residual = 0;
+    dcr.pressure_residual = 0;
+    dcr.residual = 1;
+    dcr.residual_old = 1;
+
+    dcr.switch_initial_residual = 1;
+    dcr.newton_residual_for_derivative_scaling_factor = 1;
+
+    const unsigned int max_nonlinear_iterations =
+      (pre_refinement_step < parameters.initial_adaptive_refinement)
+      ?
+      std::min(parameters.max_nonlinear_iterations,
+               parameters.max_nonlinear_iterations_in_prerefinement)
+      :
+      parameters.max_nonlinear_iterations;
+
+    SolverControl nonlinear_solver_control(max_nonlinear_iterations,
+                                           parameters.nonlinear_tolerance);
+
+    // Now iterate out the nonlinearities.
+    dcr.stokes_residuals = std::pair<double,double>  (numbers::signaling_nan<double>(),
+                                                      numbers::signaling_nan<double>());
+
+    double relative_residual = std::numeric_limits<double>::max();
+    nonlinear_iteration = 0;
+    do
+      {
+        assemble_and_solve_defect_correction_Stokes(dcr, true);
+
+        pcout << std::endl;
+
+        relative_residual = dcr.residual/dcr.initial_residual;
+
+        if (parameters.run_postprocessors_on_nonlinear_iterations)
+          {
+            // Before postprocessing, we need to copy the actual solution into the solution vector
+            // (which is used for postprocessing)
+            solution = current_linearization_point;
+            postprocess ();
+          }
 
         ++nonlinear_iteration;
       }
-    while (nonlinear_iteration < max_nonlinear_iterations);
+    while (nonlinear_solver_control.check(nonlinear_iteration, relative_residual) == SolverControl::iterate);
+
+    // Reset the linear tolerance to what it was at the beginning of the time step.
+    parameters.linear_stokes_solver_tolerance = begin_linear_tolerance;
+
+    // When we are finished iterating, we need to set the final solution to the current linearization point,
+    // because the solution vector is used in the postprocess.
+    solution = current_linearization_point;
+
+    signals.post_nonlinear_solver(nonlinear_solver_control);
   }
+
+  template <int dim>
+  void Simulator<dim>::solve_single_advection_iterated_defect_correction_stokes ()
+  {
+    // Now store the linear_tolerance we started out with, because we might change
+    // it within this timestep.
+    const double begin_linear_tolerance = parameters.linear_stokes_solver_tolerance;
+
+    DefectCorrectionResiduals dcr;
+    dcr.initial_residual = 1;
+
+    dcr.velocity_residual = 0;
+    dcr.pressure_residual = 0;
+    dcr.residual = 1;
+    dcr.residual_old = 1;
+
+    dcr.switch_initial_residual = 1;
+    dcr.newton_residual_for_derivative_scaling_factor = 1;
+
+    const unsigned int max_nonlinear_iterations =
+      (pre_refinement_step < parameters.initial_adaptive_refinement)
+      ?
+      std::min(parameters.max_nonlinear_iterations,
+               parameters.max_nonlinear_iterations_in_prerefinement)
+      :
+      parameters.max_nonlinear_iterations;
+
+    SolverControl nonlinear_solver_control(max_nonlinear_iterations,
+                                           parameters.nonlinear_tolerance);
+
+    // Now iterate out the nonlinearities.
+    dcr.stokes_residuals = std::pair<double,double>  (numbers::signaling_nan<double>(),
+                                                      numbers::signaling_nan<double>());
+
+    assemble_and_solve_temperature();
+    assemble_and_solve_composition();
+
+    double relative_residual = std::numeric_limits<double>::max();
+    nonlinear_iteration = 0;
+    do
+      {
+        assemble_and_solve_defect_correction_Stokes(dcr, true);
+
+        pcout << std::endl;
+
+        relative_residual = dcr.residual/dcr.initial_residual;
+
+        if (parameters.run_postprocessors_on_nonlinear_iterations)
+          {
+            // Before postprocessing, we need to copy the actual solution into the solution vector
+            // (which is used for postprocessing)
+            solution = current_linearization_point;
+            postprocess ();
+          }
+
+        ++nonlinear_iteration;
+      }
+    while (nonlinear_solver_control.check(nonlinear_iteration, relative_residual) == SolverControl::iterate);
+
+    // Reset the linear tolerance to what it was at the beginning of the time step.
+    parameters.linear_stokes_solver_tolerance = begin_linear_tolerance;
+
+    // When we are finished iterating, we need to set the final solution to the current linearization point,
+    // because the solution vector is used in the postprocess.
+    solution = current_linearization_point;
+
+    signals.post_nonlinear_solver(nonlinear_solver_control);
+  }
+
+  template <int dim>
+  void Simulator<dim>::solve_iterated_advection_and_defect_correction_stokes ()
+  {
+    // Now store the linear_tolerance we started out with, because we might change
+    // it within this timestep.
+    const double begin_linear_tolerance = parameters.linear_stokes_solver_tolerance;
+    double initial_temperature_residual = 0;
+    std::vector<double> initial_composition_residual (parameters.n_compositional_fields,0);
+
+    DefectCorrectionResiduals dcr;
+    dcr.initial_residual = 1;
+
+    dcr.velocity_residual = 0;
+    dcr.pressure_residual = 0;
+    dcr.residual = 1;
+    dcr.residual_old = 1;
+
+    dcr.switch_initial_residual = 1;
+    dcr.newton_residual_for_derivative_scaling_factor = 1;
+
+    const unsigned int max_nonlinear_iterations =
+      (pre_refinement_step < parameters.initial_adaptive_refinement)
+      ?
+      std::min(parameters.max_nonlinear_iterations,
+               parameters.max_nonlinear_iterations_in_prerefinement)
+      :
+      parameters.max_nonlinear_iterations;
+
+    SolverControl nonlinear_solver_control(max_nonlinear_iterations,
+                                           parameters.nonlinear_tolerance);
+
+    // Now iterate out the nonlinearities.
+    dcr.stokes_residuals = std::pair<double,double>  (numbers::signaling_nan<double>(),
+                                                      numbers::signaling_nan<double>());
+
+    double relative_residual = std::numeric_limits<double>::max();
+    nonlinear_iteration = 0;
+    do
+      {
+        const double relative_temperature_residual =
+          assemble_and_solve_temperature(nonlinear_iteration == 0, &initial_temperature_residual);
+
+        const std::vector<double>  relative_composition_residual =
+          assemble_and_solve_composition(nonlinear_iteration == 0, &initial_composition_residual);
+
+        // write the residual output in the same order as the solutions
+        pcout << "      Relative nonlinear residuals (temperature, compositional fields): " << relative_temperature_residual;
+        for (unsigned int c=0; c<introspection.n_compositional_fields; ++c)
+          pcout << ", " << relative_composition_residual[c];
+        pcout << std::endl;
+
+        assemble_and_solve_defect_correction_Stokes(dcr, true);
+
+        double max = 0.0;
+        for (unsigned int c=0; c<introspection.n_compositional_fields; ++c)
+          {
+            // in models with melt migration the melt advection equation includes the divergence of the velocity
+            // and can not be expected to converge to a smaller value than the residual of the Stokes equation.
+            // thus, we set a threshold for the initial composition residual.
+            // this only plays a role if the right-hand side of the advection equation is very small.
+            const double threshold = (parameters.include_melt_transport && c == introspection.compositional_index_for_name("porosity")
+                                      ?
+                                      parameters.linear_stokes_solver_tolerance * time_step
+                                      :
+                                      0.0);
+            if (initial_composition_residual[c]>threshold)
+              max = std::max(relative_composition_residual[c],max);
+          }
+
+        max = std::max(dcr.residual/dcr.initial_residual, max);
+        relative_residual = std::max(relative_temperature_residual, max);
+        pcout << "      Relative nonlinear residual (total system) after nonlinear iteration " << nonlinear_iteration+1
+              << ": " << relative_residual
+              << std::endl
+              << std::endl;
+
+        if (parameters.run_postprocessors_on_nonlinear_iterations)
+          {
+            // Before postprocessing, we need to copy the actual solution into the solution vector
+            // (which is used for postprocessing)
+            solution = current_linearization_point;
+            postprocess ();
+          }
+
+        ++nonlinear_iteration;
+      }
+    while (nonlinear_solver_control.check(nonlinear_iteration, relative_residual) == SolverControl::iterate);
+
+    // Reset the linear tolerance to what it was at the beginning of the time step.
+    parameters.linear_stokes_solver_tolerance = begin_linear_tolerance;
+
+    // When we are finished iterating, we need to set the final solution to the current linearization point,
+    // because the solution vector is used in the postprocess.
+    solution = current_linearization_point;
+
+    signals.post_nonlinear_solver(nonlinear_solver_control);
+  }
+
 
 
   template <int dim>
@@ -723,6 +999,12 @@ namespace aspect
 
     if (parameters.run_postprocessors_on_nonlinear_iterations)
       postprocess ();
+
+    // Setup a nonlinear solver control that only allows a single iteration
+    SolverControl nonlinear_solver_control(1,1.0);
+    // Announce that we did a single iteration, and assume we have converged
+    nonlinear_solver_control.check(1,0.0);
+    signals.post_nonlinear_solver(nonlinear_solver_control);
   }
 
   template <int dim>
@@ -730,6 +1012,12 @@ namespace aspect
   {
     if (timestep_number == 0)
       assemble_and_solve_stokes();
+
+    // Setup a nonlinear solver control that only allows a single iteration
+    SolverControl nonlinear_solver_control(1,1.0);
+    // Announce that we did a single iteration, and assume we have converged
+    nonlinear_solver_control.check(1,0.0);
+    signals.post_nonlinear_solver(nonlinear_solver_control);
   }
 
 
@@ -749,6 +1037,11 @@ namespace aspect
       :
       parameters.max_nonlinear_iterations;
 
+    SolverControl nonlinear_solver_control(max_nonlinear_iterations,
+                                           parameters.nonlinear_tolerance);
+
+    double relative_residual = std::numeric_limits<double>::max();
+    nonlinear_iteration = 0;
     do
       {
         const double relative_temperature_residual =
@@ -767,7 +1060,8 @@ namespace aspect
         pcout << ", " << relative_nonlinear_stokes_residual;
         pcout << std::endl;
 
-        double max = 0.0;
+        // Find the maximum residual of the individual equations
+        relative_residual = relative_temperature_residual;
         for (unsigned int c=0; c<introspection.n_compositional_fields; ++c)
           {
             // in models with melt migration the melt advection equation includes the divergence of the velocity
@@ -780,25 +1074,23 @@ namespace aspect
                                       :
                                       0.0);
             if (initial_composition_residual[c]>threshold)
-              max = std::max(relative_composition_residual[c],max);
+              relative_residual = std::max(relative_composition_residual[c],relative_residual);
           }
+        relative_residual = std::max(relative_nonlinear_stokes_residual, relative_residual);
 
-        max = std::max(relative_nonlinear_stokes_residual, max);
-        max = std::max(relative_temperature_residual, max);
         pcout << "      Relative nonlinear residual (total system) after nonlinear iteration " << nonlinear_iteration+1
-              << ": " << max
+              << ": " << relative_residual
               << std::endl
               << std::endl;
 
         if (parameters.run_postprocessors_on_nonlinear_iterations)
           postprocess ();
 
-        if (max < parameters.nonlinear_tolerance)
-          break;
-
         ++nonlinear_iteration;
       }
-    while (nonlinear_iteration < max_nonlinear_iterations);
+    while (nonlinear_solver_control.check(nonlinear_iteration, relative_residual) == SolverControl::iterate);
+
+    signals.post_nonlinear_solver(nonlinear_solver_control);
   }
 
 
@@ -822,26 +1114,29 @@ namespace aspect
       :
       parameters.max_nonlinear_iterations;
 
+    SolverControl nonlinear_solver_control(max_nonlinear_iterations,
+                                           parameters.nonlinear_tolerance);
+
+    double relative_residual = std::numeric_limits<double>::max();
+    nonlinear_iteration = 0;
     do
       {
-        const double relative_nonlinear_stokes_residual =
+        relative_residual =
           assemble_and_solve_stokes(nonlinear_iteration == 0, &initial_stokes_residual);
 
         pcout << "      Relative nonlinear residual (Stokes system) after nonlinear iteration " << nonlinear_iteration+1
-              << ": " << relative_nonlinear_stokes_residual
+              << ": " << relative_residual
               << std::endl
               << std::endl;
 
         if (parameters.run_postprocessors_on_nonlinear_iterations)
           postprocess ();
 
-        // if reached convergence, exit nonlinear iterations.
-        if (relative_nonlinear_stokes_residual < parameters.nonlinear_tolerance)
-          break;
-
         ++nonlinear_iteration;
       }
-    while (nonlinear_iteration < max_nonlinear_iterations);
+    while (nonlinear_solver_control.check(nonlinear_iteration, relative_residual) == SolverControl::iterate);
+
+    signals.post_nonlinear_solver(nonlinear_solver_control);
   }
 
 
@@ -851,7 +1146,7 @@ namespace aspect
   {
     // Now store the linear_tolerance we started out with, because we might change
     // it within this timestep.
-    double begin_linear_tolerance = parameters.linear_stokes_solver_tolerance;
+    const double begin_linear_tolerance = parameters.linear_stokes_solver_tolerance;
 
     std::vector<double> initial_composition_residual (parameters.n_compositional_fields,0);
 
@@ -882,13 +1177,23 @@ namespace aspect
     // Now iterate out the nonlinearities.
     dcr.stokes_residuals = std::pair<double,double>  (numbers::signaling_nan<double>(),
                                                       numbers::signaling_nan<double>());
-    for (nonlinear_iteration = 0; nonlinear_iteration < max_nonlinear_iterations; ++nonlinear_iteration)
+
+    SolverControl nonlinear_solver_control(max_nonlinear_iterations,
+                                           parameters.nonlinear_tolerance);
+
+    SolverControl nonlinear_solver_control_picard(newton_handler->parameters.max_pre_newton_nonlinear_iterations,
+                                                  newton_handler->parameters.nonlinear_switch_tolerance);
+
+    double relative_residual = std::numeric_limits<double>::max();
+    nonlinear_iteration = 0;
+
+    do
       {
         assemble_and_solve_temperature();
         assemble_and_solve_composition();
 
-        if (use_picard == true && (dcr.residual/dcr.initial_residual <= newton_handler->parameters.nonlinear_switch_tolerance ||
-                                   nonlinear_iteration >= newton_handler->parameters.max_pre_newton_nonlinear_iterations))
+        if (use_picard == true &&
+            nonlinear_solver_control_picard.check(nonlinear_iteration, relative_residual) != SolverControl::iterate)
           {
             use_picard = false;
             pcout << "   Switching from defect correction form of Picard to the Newton solver scheme." << std::endl;
@@ -908,13 +1213,21 @@ namespace aspect
                       (1.0-(dcr.newton_residual_for_derivative_scaling_factor/dcr.switch_initial_residual))));
 
         assemble_and_solve_defect_correction_Stokes(dcr, use_picard);
+        relative_residual = dcr.residual/dcr.initial_residual;
+
+        pcout << std::endl;
 
         if (parameters.run_postprocessors_on_nonlinear_iterations)
-          postprocess ();
+          {
+            // Before postprocessing, we need to copy the actual solution into the solution vector
+            // (which is used for postprocessing)
+            solution = current_linearization_point;
+            postprocess ();
+          }
 
-        if (dcr.residual/dcr.initial_residual < parameters.nonlinear_tolerance)
-          break;
+        ++nonlinear_iteration;
       }
+    while (nonlinear_solver_control.check(nonlinear_iteration, relative_residual) == SolverControl::iterate);
 
     // Reset the Newton stabilization at the end of the timestep.
     newton_handler->parameters.preconditioner_stabilization = starting_preconditioner_stabilization;
@@ -926,13 +1239,15 @@ namespace aspect
     // When we are finished iterating, we need to set the final solution to the current linearization point,
     // because the solution vector is used in the postprocess.
     solution = current_linearization_point;
+
+    signals.post_nonlinear_solver(nonlinear_solver_control);
   }
 
 
   template <int dim>
   void Simulator<dim>::solve_single_advection_iterated_newton_stokes ()
   {
-    // First assemble and sove the temperature and compositional fields
+    // First assemble and solve the temperature and compositional fields
     assemble_and_solve_temperature();
     assemble_and_solve_composition();
 
@@ -966,13 +1281,23 @@ namespace aspect
       :
       parameters.max_nonlinear_iterations;
 
+    SolverControl nonlinear_solver_control(max_nonlinear_iterations,
+                                           parameters.nonlinear_tolerance);
+
+    SolverControl nonlinear_solver_control_picard(newton_handler->parameters.max_pre_newton_nonlinear_iterations,
+                                                  newton_handler->parameters.nonlinear_switch_tolerance);
+
     // Now iterate out the nonlinearities.
     dcr.stokes_residuals = std::pair<double,double>  (numbers::signaling_nan<double>(),
                                                       numbers::signaling_nan<double>());
-    for (nonlinear_iteration = 0; nonlinear_iteration < max_nonlinear_iterations; ++nonlinear_iteration)
+
+    double relative_residual = std::numeric_limits<double>::max();
+    nonlinear_iteration = 0;
+    do
       {
-        if (use_picard == true && (dcr.residual/dcr.initial_residual <= newton_handler->parameters.nonlinear_switch_tolerance ||
-                                   nonlinear_iteration >= newton_handler->parameters.max_pre_newton_nonlinear_iterations))
+        // If we are in the Picard phase, check if we can switch to Newton
+        if (use_picard == true &&
+            nonlinear_solver_control_picard.check(nonlinear_iteration, relative_residual) != SolverControl::iterate)
           {
             use_picard = false;
             pcout << "   Switching from defect correction form of Picard to the Newton solver scheme." << std::endl;
@@ -993,12 +1318,21 @@ namespace aspect
 
         assemble_and_solve_defect_correction_Stokes(dcr, use_picard);
 
-        if (parameters.run_postprocessors_on_nonlinear_iterations)
-          postprocess ();
+        pcout << std::endl;
 
-        if (dcr.residual/dcr.initial_residual < parameters.nonlinear_tolerance)
-          break;
+        relative_residual = dcr.residual/dcr.initial_residual;
+
+        if (parameters.run_postprocessors_on_nonlinear_iterations)
+          {
+            // Before postprocessing, we need to copy the actual solution into the solution vector
+            // (which is used for postprocessing)
+            solution = current_linearization_point;
+            postprocess ();
+          }
+
+        ++nonlinear_iteration;
       }
+    while (nonlinear_solver_control.check(nonlinear_iteration, relative_residual) == SolverControl::iterate);
 
     // Reset the Newton stabilization at the end of the timestep.
     newton_handler->parameters.preconditioner_stabilization = starting_preconditioner_stabilization;
@@ -1010,6 +1344,8 @@ namespace aspect
     // When we are finished iterating, we need to set the final solution to the current linearization point,
     // because the solution vector is used in the postprocess.
     solution = current_linearization_point;
+
+    signals.post_nonlinear_solver(nonlinear_solver_control);
   }
 
 
@@ -1059,6 +1395,12 @@ namespace aspect
 
     if (parameters.run_postprocessors_on_nonlinear_iterations)
       postprocess ();
+
+    // Setup a nonlinear solver control that only allows a single iteration
+    SolverControl nonlinear_solver_control(1,1.0);
+    // Announce that we did a single iteration, and assume we have converged
+    nonlinear_solver_control.check(1,0.0);
+    signals.post_nonlinear_solver(nonlinear_solver_control);
   }
 
 
@@ -1068,6 +1410,12 @@ namespace aspect
   {
     if (parameters.run_postprocessors_on_nonlinear_iterations)
       postprocess ();
+
+    // Setup a nonlinear solver control that only allows a single iteration
+    SolverControl nonlinear_solver_control(1,1.0);
+    // Announce that we did a single iteration, and assume we have converged
+    nonlinear_solver_control.check(1,0.0);
+    signals.post_nonlinear_solver(nonlinear_solver_control);
   }
 }
 
@@ -1083,6 +1431,9 @@ namespace aspect
   template void Simulator<dim>::solve_no_advection_single_stokes(); \
   template void Simulator<dim>::solve_iterated_advection_and_stokes(); \
   template void Simulator<dim>::solve_single_advection_iterated_stokes(); \
+  template void Simulator<dim>::solve_no_advection_iterated_defect_correction_stokes(); \
+  template void Simulator<dim>::solve_single_advection_iterated_defect_correction_stokes(); \
+  template void Simulator<dim>::solve_iterated_advection_and_defect_correction_stokes(); \
   template void Simulator<dim>::solve_iterated_advection_and_newton_stokes(); \
   template void Simulator<dim>::solve_single_advection_iterated_newton_stokes(); \
   template void Simulator<dim>::solve_single_advection_no_stokes(); \
@@ -1090,4 +1441,6 @@ namespace aspect
   template void Simulator<dim>::solve_no_advection_no_stokes();
 
   ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
 }

@@ -152,11 +152,7 @@ namespace aspect
                         const typename DoFHandler<dim>::cell_iterator neighbor =
                           cell->neighbor_or_periodic_neighbor(neighbor_no);
                         if (neighbor->level() == cell->level() &&
-#if DEAL_II_VERSION_GTE(9,2,0)
                             neighbor->is_active())
-#else
-                            neighbor->active())
-#endif
                           cen = neighbor;
                         else
                           cen = endc;
@@ -193,11 +189,7 @@ namespace aspect
                                 const typename DoFHandler<dim>::cell_iterator neighbor =
                                   cen->neighbor_or_periodic_neighbor(neighbor_no);
                                 if (neighbor->level() == cell->level() &&
-#if DEAL_II_VERSION_GTE(9,2,0)
                                     neighbor->is_active())
-#else
-                                    neighbor->active())
-#endif
                                   curr = neighbor;
                                 else
                                   curr = endc;
@@ -515,8 +507,10 @@ namespace aspect
     solution.block(blockidx) = initial_solution.block(blockidx);
   }
 
+
+
   template <>
-  void VolumeOfFluidHandler<3>::update_volume_of_fluid_composition (const typename Simulator<3>::AdvectionField &/*composition_field*/,
+  void VolumeOfFluidHandler<3>::update_volume_of_fluid_composition (const Simulator<3>::AdvectionField &/*composition_field*/,
                                                                     const VolumeOfFluidField<3> &/*volume_of_fluid_field*/,
                                                                     LinearAlgebra::BlockVector &/*solution*/)
   {

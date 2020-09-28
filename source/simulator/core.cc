@@ -143,7 +143,10 @@ namespace aspect
                   std_cxx14::make_unique<MeltHandler<dim>>(prm) :
                   nullptr),
     newton_handler ((parameters.nonlinear_solver == NonlinearSolver::iterated_Advection_and_Newton_Stokes ||
-                     parameters.nonlinear_solver == NonlinearSolver::single_Advection_iterated_Newton_Stokes) ?
+                     parameters.nonlinear_solver == NonlinearSolver::single_Advection_iterated_Newton_Stokes ||
+                     parameters.nonlinear_solver == NonlinearSolver::no_Advection_iterated_defect_correction_Stokes ||
+                     parameters.nonlinear_solver == NonlinearSolver::single_Advection_iterated_defect_correction_Stokes ||
+                     parameters.nonlinear_solver == NonlinearSolver::iterated_Advection_and_defect_correction_Stokes) ?
                     std_cxx14::make_unique<NewtonHandler<dim>>() :
                     nullptr),
     post_signal_creation(
@@ -194,17 +197,21 @@ namespace aspect
     timestep_number (numbers::invalid_unsigned_int),
     nonlinear_iteration (numbers::invalid_unsigned_int),
 
+    // We need to disable eliminate_refined_boundary_islands as this leads to
+    // a deadlock for deal.II <= 9.2.0 as described in
+    // https://github.com/geodynamics/aspect/issues/3604 when an
+    // refined_island is at a periodic boundary. This flag is not too
+    // important as it does not improve accuracy. Otherwise, these flags
+    // correspond to smoothing_on_refinement|smoothing_on_coarsening.
     triangulation (mpi_communicator,
-                   (parameters.stokes_solver_type == Parameters<dim>::StokesSolverType::block_gmg
-                    ?
-                    typename Triangulation<dim>::MeshSmoothing
-                    (Triangulation<dim>::smoothing_on_refinement |
-                     Triangulation<dim>::smoothing_on_coarsening |
-                     Triangulation<dim>::limit_level_difference_at_vertices)
-                    :
-                    typename Triangulation<dim>::MeshSmoothing
-                    (Triangulation<dim>::smoothing_on_refinement |
-                     Triangulation<dim>::smoothing_on_coarsening))
+                   typename Triangulation<dim>::MeshSmoothing
+                   (
+                     Triangulation<dim>::limit_level_difference_at_vertices |
+                     (Triangulation<dim>::eliminate_unrefined_islands |
+                      Triangulation<dim>::eliminate_refined_inner_islands |
+                      // Triangulation<dim>::eliminate_refined_boundary_islands |
+                      Triangulation<dim>::do_not_produce_unrefined_islands)
+                   )
                    ,
                    (parameters.stokes_solver_type == Parameters<dim>::StokesSolverType::block_gmg
                     ?
@@ -227,7 +234,14 @@ namespace aspect
     rebuild_stokes_matrix (true),
     assemble_newton_stokes_matrix (true),
     assemble_newton_stokes_system ((parameters.nonlinear_solver == NonlinearSolver::iterated_Advection_and_Newton_Stokes ||
-                                    parameters.nonlinear_solver == NonlinearSolver::single_Advection_iterated_Newton_Stokes) ? true : false),
+                                    parameters.nonlinear_solver == NonlinearSolver::single_Advection_iterated_Newton_Stokes ||
+                                    parameters.nonlinear_solver == NonlinearSolver::no_Advection_iterated_defect_correction_Stokes ||
+                                    parameters.nonlinear_solver == NonlinearSolver::single_Advection_iterated_defect_correction_Stokes ||
+                                    parameters.nonlinear_solver == NonlinearSolver::iterated_Advection_and_defect_correction_Stokes)
+                                   ?
+                                   true
+                                   :
+                                   false),
     rebuild_stokes_preconditioner (true)
   {
     if (Utilities::MPI::this_mpi_process(mpi_communicator) == 0)
@@ -372,10 +386,13 @@ namespace aspect
         melt_handler->initialize();
       }
 
-    // If the solver type is a Newton type of solver, we need to set make sure
+    // If the solver type is a Newton or defect correction type of solver, we need to set make sure
     // assemble_newton_stokes_system set to true.
     if (parameters.nonlinear_solver == NonlinearSolver::iterated_Advection_and_Newton_Stokes ||
-        parameters.nonlinear_solver == NonlinearSolver::single_Advection_iterated_Newton_Stokes)
+        parameters.nonlinear_solver == NonlinearSolver::single_Advection_iterated_Newton_Stokes ||
+        parameters.nonlinear_solver == NonlinearSolver::no_Advection_iterated_defect_correction_Stokes ||
+        parameters.nonlinear_solver == NonlinearSolver::single_Advection_iterated_defect_correction_Stokes ||
+        parameters.nonlinear_solver == NonlinearSolver::iterated_Advection_and_defect_correction_Stokes)
       {
         assemble_newton_stokes_system = true;
         newton_handler->initialize_simulator(*this);
@@ -421,23 +438,20 @@ namespace aspect
         volume_of_fluid_handler->initialize (prm);
       }
 
-    termination_manager.initialize_simulator (*this);
-    termination_manager.parse_parameters (prm);
+    time_stepping_manager.initialize_simulator (*this);
+    time_stepping_manager.parse_parameters (prm);
 
     lateral_averaging.initialize_simulator (*this);
 
     geometry_model->create_coarse_mesh (triangulation);
     global_Omega_diameter = GridTools::diameter (triangulation);
 
-    for (std::map<types::boundary_id,std::pair<std::string,std::string> >::const_iterator
-         p = parameters.prescribed_traction_boundary_indicators.begin();
-         p != parameters.prescribed_traction_boundary_indicators.end();
-         ++p)
+    for (const auto &p : parameters.prescribed_traction_boundary_indicators)
       {
         BoundaryTraction::Interface<dim> *bv
           = BoundaryTraction::create_boundary_traction<dim>
-            (p->second.second);
-        boundary_traction[p->first].reset (bv);
+            (p.second.second);
+        boundary_traction[p.first].reset (bv);
         if (SimulatorAccess<dim> *sim = dynamic_cast<SimulatorAccess<dim>*>(bv))
           sim->initialize_simulator(*this);
         bv->parse_parameters (prm);
@@ -446,21 +460,12 @@ namespace aspect
 
     std::set<types::boundary_id> open_velocity_boundary_indicators
       = geometry_model->get_used_boundary_indicators();
-    for (std::map<types::boundary_id,std::pair<std::string,std::vector<std::string> > >::const_iterator
-         p = boundary_velocity_manager.get_active_boundary_velocity_names().begin();
-         p != boundary_velocity_manager.get_active_boundary_velocity_names().end();
-         ++p)
-      open_velocity_boundary_indicators.erase (p->first);
-    for (std::set<types::boundary_id>::const_iterator
-         p = boundary_velocity_manager.get_zero_boundary_velocity_indicators().begin();
-         p != boundary_velocity_manager.get_zero_boundary_velocity_indicators().end();
-         ++p)
-      open_velocity_boundary_indicators.erase (*p);
-    for (std::set<types::boundary_id>::const_iterator
-         p = boundary_velocity_manager.get_tangential_boundary_velocity_indicators().begin();
-         p != boundary_velocity_manager.get_tangential_boundary_velocity_indicators().end();
-         ++p)
-      open_velocity_boundary_indicators.erase (*p);
+    for (const auto &p : boundary_velocity_manager.get_active_boundary_velocity_names())
+      open_velocity_boundary_indicators.erase (p.first);
+    for (const auto p : boundary_velocity_manager.get_zero_boundary_velocity_indicators())
+      open_velocity_boundary_indicators.erase (p);
+    for (const auto p : boundary_velocity_manager.get_tangential_boundary_velocity_indicators())
+      open_velocity_boundary_indicators.erase (p);
 
     // We need to do the RHS compatibility modification, if the model is
     // compressible or compatible (in the case of melt transport), and
@@ -535,111 +540,6 @@ namespace aspect
     computing_timer.reset();
   }
 
-
-  namespace
-  {
-    /**
-     * Conversion object where one can provide a function that returns
-     * a tensor for the velocity at a given point and it returns something
-     * that matches the dealii::Function interface with a number of output
-     * components equal to the number of components of the finite element
-     * in use.
-     */
-    template <int dim>
-    class VectorFunctionFromVelocityFunctionObject : public Function<dim>
-    {
-      public:
-        /**
-         * Given a function object that takes a Point and returns a Tensor<1,dim>,
-         * convert this into an object that matches the Function@<dim@>
-         * interface.
-         *
-         * @param n_components total number of components of the finite element system.
-         * @param function_object The function that will form one component
-         *     of the resulting Function object.
-         */
-        VectorFunctionFromVelocityFunctionObject (const unsigned int n_components,
-                                                  const std::function<Tensor<1,dim> (const Point<dim> &)> &function_object);
-
-        /**
-         * Return the value of the
-         * function at the given
-         * point. Returns the value the
-         * function given to the constructor
-         * produces for this point.
-         */
-        double value (const Point<dim>   &p,
-                      const unsigned int  component = 0) const override;
-
-        /**
-         * Return all components of a
-         * vector-valued function at a
-         * given point.
-         *
-         * <tt>values</tt> shall have the right
-         * size beforehand,
-         * i.e. #n_components.
-         */
-        void vector_value (const Point<dim>   &p,
-                           Vector<double>     &values) const override;
-
-      private:
-        /**
-         * The function object which we call when this class's value() or
-         * value_list() functions are called.
-         **/
-        const std::function<Tensor<1,dim> (const Point<dim> &)> function_object;
-    };
-
-
-    template <int dim>
-    VectorFunctionFromVelocityFunctionObject<dim>::
-    VectorFunctionFromVelocityFunctionObject
-    (const unsigned int n_components,
-     const std::function<Tensor<1,dim> (const Point<dim> &)> &function_object)
-      :
-      Function<dim>(n_components),
-      function_object (function_object)
-    {
-    }
-
-
-
-    template <int dim>
-    double
-    VectorFunctionFromVelocityFunctionObject<dim>::value (const Point<dim> &p,
-                                                          const unsigned int component) const
-    {
-      Assert (component < this->n_components,
-              ExcIndexRange (component, 0, this->n_components));
-
-      if (component < dim)
-        {
-          const Tensor<1,dim> v = function_object(p);
-          return v[component];
-        }
-      else
-        return 0;
-    }
-
-
-
-    template <int dim>
-    void
-    VectorFunctionFromVelocityFunctionObject<dim>::
-    vector_value (const Point<dim>   &p,
-                  Vector<double>     &values) const
-    {
-      AssertDimension(values.size(), this->n_components);
-
-      // set everything to zero, and then the right components to their correct values
-      values = 0;
-
-      const Tensor<1,dim> v = function_object(p);
-      for (unsigned int d=0; d<dim; ++d)
-        values(d) = v[d];
-    }
-  }
 
 
   template <int dim>
@@ -721,9 +621,9 @@ namespace aspect
   Simulator<dim>::
   compute_current_constraints ()
   {
-    // We put the constraints we compute into a separate ConstraintMatrix so we can check
+    // We put the constraints we compute into a separate AffineConstraints<double> so we can check
     // if the set of constraints has changed. If it did, we need to update the sparsity patterns.
-    ConstraintMatrix new_current_constraints;
+    AffineConstraints<double> new_current_constraints;
     new_current_constraints.clear ();
     new_current_constraints.reinit (introspection.index_sets.system_relevant_set);
     new_current_constraints.merge (constraints);
@@ -735,7 +635,7 @@ namespace aspect
     boundary_heat_flux->update();
 
     // If we do not want to prescribe Dirichlet boundary conditions on outflow boundaries,
-    // we update the boundary indicators of all faces that belong to ouflow boundaries
+    // we update the boundary indicators of all faces that belong to outflow boundaries
     // so that they are not in the list of fixed temperature boundary indicators any more.
     // We will undo this change in a later step, after the constraints have been set.
     // As long as we allow deal.II 8.5, we can not have boundary ids of more than 256,
@@ -751,13 +651,11 @@ namespace aspect
         // obtain the boundary indicators that belong to Dirichlet-type
         // temperature boundary conditions and interpolate the temperature
         // there
-        for (std::set<types::boundary_id>::const_iterator
-             p = boundary_temperature_manager.get_fixed_temperature_boundary_indicators().begin();
-             p != boundary_temperature_manager.get_fixed_temperature_boundary_indicators().end(); ++p)
+        for (const auto p : boundary_temperature_manager.get_fixed_temperature_boundary_indicators())
           {
-            auto lambda = [&] (const Point<dim> &x) -> double
+            auto lambda = [&] (const dealii::Point<dim> &x) -> double
             {
-              return boundary_temperature_manager.boundary_temperature(*p, x);
+              return boundary_temperature_manager.boundary_temperature(p, x);
             };
 
             VectorFunctionFromScalarFunctionObject<dim> vector_function_object(
@@ -767,7 +665,7 @@ namespace aspect
 
             VectorTools::interpolate_boundary_values (*mapping,
                                                       dof_handler,
-                                                      *p,
+                                                      p,
                                                       vector_function_object,
                                                       new_current_constraints,
                                                       introspection.component_masks.temperature);
@@ -794,13 +692,11 @@ namespace aspect
         // composition boundary conditions and interpolate the composition
         // there
         for (unsigned int c=0; c<introspection.n_compositional_fields; ++c)
-          for (std::set<types::boundary_id>::const_iterator
-               p = boundary_composition_manager.get_fixed_composition_boundary_indicators().begin();
-               p != boundary_composition_manager.get_fixed_composition_boundary_indicators().end(); ++p)
+          for (const auto p : boundary_composition_manager.get_fixed_composition_boundary_indicators())
             {
               auto lambda = [&] (const Point<dim> &x) -> double
               {
-                return boundary_composition_manager.boundary_composition(*p, x, c);
+                return boundary_composition_manager.boundary_composition(p, x, c);
               };
 
               VectorFunctionFromScalarFunctionObject<dim> vector_function_object(
@@ -810,7 +706,7 @@ namespace aspect
 
               VectorTools::interpolate_boundary_values (*mapping,
                                                         dof_handler,
-                                                        *p,
+                                                        p,
                                                         vector_function_object,
                                                         new_current_constraints,
                                                         introspection.component_masks.compositional_fields[c]);
@@ -891,6 +787,9 @@ namespace aspect
           case Parameters<dim>::NonlinearSolver::Kind::single_Advection_single_Stokes:
           case Parameters<dim>::NonlinearSolver::Kind::iterated_Advection_and_Stokes:
           case Parameters<dim>::NonlinearSolver::Kind::single_Advection_iterated_Stokes:
+          case Parameters<dim>::NonlinearSolver::Kind::no_Advection_iterated_defect_correction_Stokes:
+          case Parameters<dim>::NonlinearSolver::Kind::single_Advection_iterated_defect_correction_Stokes:
+          case Parameters<dim>::NonlinearSolver::Kind::iterated_Advection_and_defect_correction_Stokes:
           case Parameters<dim>::NonlinearSolver::Kind::iterated_Advection_and_Newton_Stokes:
           case Parameters<dim>::NonlinearSolver::Kind::single_Advection_iterated_Newton_Stokes:
           case Parameters<dim>::NonlinearSolver::Kind::single_Advection_no_Stokes:
@@ -919,6 +818,9 @@ namespace aspect
           case Parameters<dim>::NonlinearSolver::Kind::single_Advection_iterated_Stokes:
           case Parameters<dim>::NonlinearSolver::Kind::no_Advection_iterated_Stokes:
           case Parameters<dim>::NonlinearSolver::Kind::no_Advection_single_Stokes:
+          case Parameters<dim>::NonlinearSolver::Kind::no_Advection_iterated_defect_correction_Stokes:
+          case Parameters<dim>::NonlinearSolver::Kind::single_Advection_iterated_defect_correction_Stokes:
+          case Parameters<dim>::NonlinearSolver::Kind::iterated_Advection_and_defect_correction_Stokes:
           case Parameters<dim>::NonlinearSolver::Kind::iterated_Advection_and_Newton_Stokes:
           case Parameters<dim>::NonlinearSolver::Kind::single_Advection_iterated_Newton_Stokes:
           case Parameters<dim>::NonlinearSolver::Kind::first_timestep_only_single_Stokes:
@@ -1308,7 +1210,7 @@ namespace aspect
 
 
   template <int dim>
-  void Simulator<dim>::compute_initial_velocity_boundary_constraints (ConstraintMatrix &constraints)
+  void Simulator<dim>::compute_initial_velocity_boundary_constraints (AffineConstraints<double> &constraints)
   {
 
     // This needs to happen after the periodic constraints are added:
@@ -1322,12 +1224,10 @@ namespace aspect
     signals.pre_compute_no_normal_flux_constraints(triangulation);
     {
       // do the interpolation for zero velocity
-      for (std::set<types::boundary_id>::const_iterator
-           p = boundary_velocity_manager.get_zero_boundary_velocity_indicators().begin();
-           p != boundary_velocity_manager.get_zero_boundary_velocity_indicators().end(); ++p)
+      for (const auto p : boundary_velocity_manager.get_zero_boundary_velocity_indicators())
         VectorTools::interpolate_boundary_values (*mapping,
                                                   dof_handler,
-                                                  *p,
+                                                  p,
                                                   Functions::ZeroFunction<dim>(introspection.n_components),
                                                   constraints,
                                                   introspection.component_masks.velocities);
@@ -1346,25 +1246,23 @@ namespace aspect
   }
 
   template <int dim>
-  void Simulator<dim>::compute_current_velocity_boundary_constraints (ConstraintMatrix &constraints)
+  void Simulator<dim>::compute_current_velocity_boundary_constraints (AffineConstraints<double> &constraints)
   {
     // set the current time and do the interpolation
     // for the prescribed velocity fields
     boundary_velocity_manager.update();
-    for (typename std::map<types::boundary_id,std::pair<std::string, std::vector<std::string> > >::const_iterator
-         p = boundary_velocity_manager.get_active_boundary_velocity_names().begin();
-         p != boundary_velocity_manager.get_active_boundary_velocity_names().end(); ++p)
+    for (const auto &p : boundary_velocity_manager.get_active_boundary_velocity_names())
       {
-        VectorFunctionFromVelocityFunctionObject<dim> vel
+        Utilities::VectorFunctionFromVelocityFunctionObject<dim> vel
         (introspection.n_components,
-         [&] (const Point<dim> &x) -> Tensor<1,dim>
+         [&] (const dealii::Point<dim> &x) -> Tensor<1,dim>
         {
-          return boundary_velocity_manager.boundary_velocity(p->first, x);
+          return boundary_velocity_manager.boundary_velocity(p.first, x);
         });
 
         // here we create a mask for interpolate_boundary_values out of the 'selector'
         std::vector<bool> mask(introspection.component_masks.velocities.size(), false);
-        const std::string &comp = p->second.first;
+        const std::string &comp = p.second.first;
 
         if (comp.length()>0)
           {
@@ -1400,7 +1298,7 @@ namespace aspect
           {
             VectorTools::interpolate_boundary_values (*mapping,
                                                       dof_handler,
-                                                      p->first,
+                                                      p.first,
                                                       vel,
                                                       constraints,
                                                       mask);
@@ -1409,7 +1307,7 @@ namespace aspect
           {
             VectorTools::interpolate_boundary_values (*mapping,
                                                       dof_handler,
-                                                      p->first,
+                                                      p.first,
                                                       Functions::ZeroFunction<dim>(introspection.n_components),
                                                       constraints,
                                                       mask);
@@ -1494,10 +1392,10 @@ namespace aspect
     // Set up the constraints for periodic boundary conditions:
 
     // Note: this has to happen _before_ we do hanging node constraints,
-    // because inconsistent contraints could be generated in parallel otherwise.
+    // because inconsistent constraints could be generated in parallel otherwise.
     {
-      typedef std::set< std::pair< std::pair< types::boundary_id, types::boundary_id>, unsigned int> >
-      periodic_boundary_set;
+      using periodic_boundary_set
+        = std::set< std::pair< std::pair< types::boundary_id, types::boundary_id>, unsigned int> >;
       periodic_boundary_set pbs = geometry_model->get_periodic_boundary_pairs();
 
       for (periodic_boundary_set::iterator p = pbs.begin(); p != pbs.end(); ++p)
@@ -1552,35 +1450,17 @@ namespace aspect
   {
     // compute the various partitionings between processors and blocks
     // of vectors and matrices
-#if DEAL_II_VERSION_GTE(9,2,0)
     introspection.system_dofs_per_block = DoFTools::count_dofs_per_fe_block (dof_handler,
                                                                              introspection.get_components_to_blocks());
-#else
-    DoFTools::count_dofs_per_block (dof_handler,
-                                    introspection.system_dofs_per_block,
-                                    introspection.get_components_to_blocks());
-#endif
 
     {
       IndexSet system_index_set = dof_handler.locally_owned_dofs();
-#if DEAL_II_VERSION_GTE(9,2,0)
       introspection.index_sets.system_partitioning = system_index_set.split_by_block(introspection.system_dofs_per_block);
-#else
-      aspect::Utilities::split_by_block (introspection.system_dofs_per_block,
-                                         system_index_set,
-                                         introspection.index_sets.system_partitioning);
-#endif
 
       DoFTools::extract_locally_relevant_dofs (dof_handler,
                                                introspection.index_sets.system_relevant_set);
-#if DEAL_II_VERSION_GTE(9,2,0)
       introspection.index_sets.system_relevant_partitioning =
         introspection.index_sets.system_relevant_set.split_by_block(introspection.system_dofs_per_block);
-#else
-      aspect::Utilities::split_by_block (introspection.system_dofs_per_block,
-                                         introspection.index_sets.system_relevant_set,
-                                         introspection.index_sets.system_relevant_partitioning);
-#endif
 
       if (!parameters.include_melt_transport)
         {
@@ -1641,20 +1521,16 @@ namespace aspect
         // everything gets nicely aligned; then output everything
         {
           unsigned int width = 0;
-          for (std::list<std::pair<std::string,std::string> >::const_iterator
-               p = output_list.begin();
-               p != output_list.end(); ++p)
-            width = std::max<unsigned int> (width, p->first.size());
+          for (const auto &p : output_list)
+            width = std::max<unsigned int> (width, p.first.size());
 
-          for (std::list<std::pair<std::string,std::string> >::const_iterator
-               p = output_list.begin();
-               p != output_list.end(); ++p)
+          for (const auto &p : output_list)
             pcout << "     "
                   << std::left
                   << std::setw(width)
-                  << p->first
+                  << p.first
                   << " "
-                  << p->second
+                  << p.second
                   << std::endl;
         }
 
@@ -1749,6 +1625,36 @@ namespace aspect
       // Possibly store data of plugins associated with cells
       signals.pre_refinement_store_user_data(triangulation);
 
+
+      {
+        // Communicate refinement flags on ghost cells from the owner of the
+        // cell. This is necessary to get consistent refinement, as mesh
+        // smoothing would undo some of the requested coarsening/refinement.
+
+        auto pack
+        = [] (const typename DoFHandler<dim>::active_cell_iterator &cell) -> unsigned int
+        {
+          if (cell->refine_flag_set())
+            return 1;
+          if (cell->coarsen_flag_set())
+            return 2;
+          return 0;
+        };
+        auto unpack
+        = [] (const typename DoFHandler<dim>::active_cell_iterator &cell, const unsigned int &flag) -> void
+        {
+          cell->clear_coarsen_flag();
+          cell->clear_refine_flag();
+          if (flag==1)
+            cell->set_refine_flag();
+          else if (flag==2)
+            cell->set_coarsen_flag();
+        };
+
+        GridTools::exchange_cell_data_to_ghosts<unsigned int, DoFHandler<dim>>
+                                                                            (dof_handler, pack, unpack);
+
+      }
       triangulation.prepare_coarsening_and_refinement();
       system_trans.prepare_for_coarsening_and_refinement(x_system);
 
@@ -1880,6 +1786,24 @@ namespace aspect
         case NonlinearSolver::single_Advection_iterated_Stokes:
         {
           solve_single_advection_iterated_stokes();
+          break;
+        }
+
+        case NonlinearSolver::no_Advection_iterated_defect_correction_Stokes:
+        {
+          solve_no_advection_iterated_defect_correction_stokes();
+          break;
+        }
+
+        case NonlinearSolver::single_Advection_iterated_defect_correction_Stokes:
+        {
+          solve_single_advection_iterated_defect_correction_stokes();
+          break;
+        }
+
+        case NonlinearSolver::iterated_Advection_and_defect_correction_Stokes:
+        {
+          solve_iterated_advection_and_defect_correction_stokes();
           break;
         }
 
@@ -2045,13 +1969,15 @@ namespace aspect
               }
           }
 
+
+
         // if we postprocess nonlinear iterations, this function is called within
         // solve_timestep () in the individual solver schemes
         if (!parameters.run_postprocessors_on_nonlinear_iterations)
           postprocess ();
 
         // get new time step size
-        const double new_time_step = compute_time_step();
+        const double new_time_step = time_stepping_manager.compute_time_step_size();
 
         // see if we want to refine the mesh
         maybe_refine_mesh(new_time_step, max_refinement_level);
@@ -2062,17 +1988,19 @@ namespace aspect
         // update values for timestep, increment time step by one.
         advance_time(new_time_step);
 
-        // Check whether to terminate the simulation. The first part of the
-        // pair indicates whether to terminate the execution; the second
-        // indicates whether to do one more checkpoint:
-        const std::pair<bool,bool> termination = termination_manager.execute();
+        // Check whether to terminate the simulation:
+        const bool should_terminate = time_stepping_manager.should_simulation_terminate_now();
 
-        const bool checkpoint_written = maybe_write_checkpoint(last_checkpoint_time, termination);
+        const bool write_checkpoint_due_to_termination
+          = should_terminate && time_stepping_manager.need_checkpoint_on_terminate();
+
+        const bool checkpoint_written = maybe_write_checkpoint(last_checkpoint_time,
+                                                               write_checkpoint_due_to_termination);
+
         if (checkpoint_written)
           last_checkpoint_time = std::time(nullptr);
 
-        // see if we want to terminate
-        if (termination.first)
+        if (should_terminate)
           break;
       }
     while (true);
@@ -2096,4 +2024,6 @@ namespace aspect
   template class Simulator<dim>;
 
   ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
 }

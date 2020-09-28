@@ -49,18 +49,13 @@ namespace aspect
           dof_handler_mem += this->get_stokes_matrix_free().get_dof_handler_v().memory_consumption()
                              + this->get_stokes_matrix_free().get_dof_handler_p().memory_consumption();
 
-          // In deal.II versions before 9.2, DoFHandler::memory_consumption() did not exist
-          // for DoFHandlers based on discontinuous finite elements, therefore we cannot
-          // compute the memory of dof_handler_projection for those versions.
-#if DEAL_II_VERSION_GTE(9,2,0)
           dof_handler_mem  += this->get_stokes_matrix_free().get_dof_handler_projection().memory_consumption();
-#endif
 
           constraints_mem += this->get_stokes_matrix_free().get_constraints_v().memory_consumption()
                              + this->get_stokes_matrix_free().get_constraints_p().memory_consumption();
         }
       statistics.add_value ("DoFHandler memory consumption (MB) ", dof_handler_mem/mb);
-      statistics.add_value ("ConstraintMatrix memory consumption (MB) ", constraints_mem/mb);
+      statistics.add_value ("AffineConstraints<double> memory consumption (MB) ", constraints_mem/mb);
 
       statistics.add_value ("Solution vector memory consumption (MB) ", this->get_solution().memory_consumption()/mb);
 

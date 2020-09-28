@@ -148,7 +148,7 @@ namespace aspect
                                const bool expects_background_field,
                                const std::string &property_name,
                                const bool allow_multiple_values_per_key = false,
-                               std::shared_ptr<std::vector<unsigned int> > n_values_per_key = nullptr,
+                               const std::shared_ptr<std::vector<unsigned int> > &n_values_per_key = nullptr,
                                const bool allow_missing_keys = false);
 
     /**
@@ -223,7 +223,7 @@ namespace aspect
        */
       template <int dim>
       std::array<double,dim>
-      WGS84_coordinates(const Point<dim> &position);
+      WGS84_coordinates(const dealii::Point<dim> &position);
 
       /**
        * Returns spherical coordinates of a Cartesian point. The returned array
@@ -233,7 +233,7 @@ namespace aspect
        */
       template <int dim>
       std::array<double,dim>
-      cartesian_to_spherical_coordinates(const Point<dim> &position);
+      cartesian_to_spherical_coordinates(const dealii::Point<dim> &position);
 
       /**
        * Return the Cartesian point of a spherical position defined by radius,
@@ -241,7 +241,7 @@ namespace aspect
        * omitted.
        */
       template <int dim>
-      Point<dim>
+      dealii::Point<dim>
       spherical_to_cartesian_coordinates(const std::array<double,dim> &scoord);
 
       /**
@@ -252,7 +252,7 @@ namespace aspect
       template <int dim>
       Tensor<1,dim>
       spherical_to_cartesian_vector(const Tensor<1,dim> &spherical_vector,
-                                    const Point<dim> &position);
+                                    const dealii::Point<dim> &position);
 
 
       /**
@@ -262,7 +262,7 @@ namespace aspect
        */
       template <int dim>
       std::array<double,3>
-      cartesian_to_ellipsoidal_coordinates(const Point<3> &position,
+      cartesian_to_ellipsoidal_coordinates(const dealii::Point<3> &position,
                                            const double semi_major_axis_a,
                                            const double eccentricity);
 
@@ -271,7 +271,7 @@ namespace aspect
        * theta and radius.
        */
       template <int dim>
-      Point<3>
+      dealii::Point<3>
       ellipsoidal_to_cartesian_coordinates(const std::array<double,3> &phi_theta_d,
                                            const double semi_major_axis_a,
                                            const double eccentricity);
@@ -605,6 +605,22 @@ namespace aspect
         explicit AsciiDataLookup(const double scale_factor);
 
         /**
+         * Replace the data stored in this class by the data given to this function.
+         *
+         * @note This is a manual way to fill the data. Consider load_file() if your data
+         * is stored in a txt/csv file.
+         *
+         * The data consists of @p n_components (implicitly given by the size of @p column_names)
+         * specified at @p coordinate_values[d] points in each of the dim coordinate directions @p d.
+         *
+         * The data in @p raw_data consists of a Table for each of the @p n_components components.
+         */
+        void reinit(const std::vector<std::string> &column_names,
+                    const std::vector<std::vector<double>> &coordinate_values,
+                    const std::vector<Table<dim,double> > &raw_data
+                   );
+
+        /**
          * Loads a data text file. Throws an exception if the file does not
          * exist, if the data file format is incorrect or if the file grid
          * changes over model runtime.
@@ -731,11 +747,11 @@ namespace aspect
         bool coordinate_values_are_equidistant;
 
         /**
-         * Computes the table indices of each entry in the input data file.
-         * The index depends on dim, grid_dim and the number of components.
+         * Computes the table indices given the size @p sizes of the
+         * i-th entry.
          */
         TableIndices<dim>
-        compute_table_indices(const unsigned int i) const;
+        compute_table_indices(const TableIndices<dim> &sizes, const unsigned int i) const;
 
     };
 
@@ -1397,6 +1413,59 @@ namespace aspect
                        const std::vector<Point<dim> > &,
                        std::vector<double> &)>                                 &function,
                      VectorType                                                &vec_result);
+
+    /**
+    * Conversion object where one can provide a function that returns
+    * a tensor for the velocity at a given point and it returns something
+    * that matches the dealii::Function interface with a number of output
+    * components equal to the number of components of the finite element
+    * in use.
+    */
+    template <int dim>
+    class VectorFunctionFromVelocityFunctionObject : public Function<dim>
+    {
+      public:
+        /**
+         * Given a function object that takes a Point and returns a Tensor<1,dim>,
+         * convert this into an object that matches the Function@<dim@>
+         * interface.
+         *
+         * @param n_components total number of components of the finite element system.
+         * @param function_object The function that will form one component
+         *     of the resulting Function object.
+         */
+        VectorFunctionFromVelocityFunctionObject (const unsigned int n_components,
+                                                  const std::function<Tensor<1,dim> (const Point<dim> &)> &function_object);
+
+        /**
+         * Return the value of the
+         * function at the given
+         * point. Returns the value the
+         * function given to the constructor
+         * produces for this point.
+         */
+        double value (const Point<dim>   &p,
+                      const unsigned int  component = 0) const override;
+
+        /**
+         * Return all components of a
+         * vector-valued function at a
+         * given point.
+         *
+         * <tt>values</tt> shall have the right
+         * size beforehand,
+         * i.e. #n_components.
+         */
+        void vector_value (const Point<dim>   &p,
+                           Vector<double>     &values) const override;
+
+      private:
+        /**
+         * The function object which we call when this class's value() or
+         * value_list() functions are called.
+         **/
+        const std::function<Tensor<1,dim> (const Point<dim> &)> function_object;
+    };
   }
 }
 

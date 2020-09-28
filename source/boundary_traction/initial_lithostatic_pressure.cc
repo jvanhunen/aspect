@@ -82,9 +82,9 @@ namespace aspect
         }
 
       // Check that the representative point lies in the domain.
-      AssertThrow((Plugins::plugin_type_matches<const GeometryModel::Box<dim>> (this->get_geometry_model())) ?
-                  (this->get_geometry_model().point_is_in_domain(representative_point)) :
-                  (this->get_geometry_model().point_is_in_domain(Utilities::Coordinates::spherical_to_cartesian_coordinates<dim>(spherical_representative_point))),
+      AssertThrow(((this->get_geometry_model().natural_coordinate_system() == Utilities::Coordinates::CoordinateSystem::cartesian) ?
+                   (this->get_geometry_model().point_is_in_domain(representative_point)) :
+                   (this->get_geometry_model().point_is_in_domain(Utilities::Coordinates::spherical_to_cartesian_coordinates<dim>(spherical_representative_point)))),
                   ExcMessage("The reference point does not lie with the domain."));
 
       // Set the radius of the representative point to the surface radius for spherical domains
@@ -111,6 +111,8 @@ namespace aspect
         spherical_representative_point[0] =  Plugins::get_plugin_as_type<const GeometryModel::Sphere<dim>>(this->get_geometry_model()).radius();
       else if (Plugins::plugin_type_matches<const GeometryModel::Box<dim>> (this->get_geometry_model()))
         representative_point[dim-1]=  Plugins::get_plugin_as_type<const GeometryModel::Box<dim>>(this->get_geometry_model()).get_extents()[dim-1];
+      else if (Plugins::plugin_type_matches<const GeometryModel::TwoMergedBoxes<dim>> (this->get_geometry_model()))
+        representative_point[dim-1]=  Plugins::get_plugin_as_type<const GeometryModel::TwoMergedBoxes<dim>>(this->get_geometry_model()).get_extents()[dim-1];
       else
         AssertThrow(false, ExcNotImplemented());
 
@@ -268,13 +270,15 @@ namespace aspect
           prm.declare_entry ("Representative point", "",
                              Patterns::List(Patterns::Double()),
                              "The point where the pressure profile will be calculated. "
-                             "Cartesian coordinates when geometry is a box, otherwise enter radius, longitude, "
-                             "and in 3D latitude."
-                             "Units: $\\si{m}$ or degrees.");
+                             "Cartesian coordinates $(x,y,z)$ when geometry is a box, otherwise enter radius, "
+                             "longitude, and in 3D latitude. Note that the coordinate related to the depth "
+                             "($y$ in 2D cartesian, $z$ in 3D cartesian and radius in spherical coordinates) is "
+                             "not used. "
+                             "Units: \\si{\\meter} or degrees.");
           prm.declare_entry("Number of integration points", "1000",
                             Patterns::Integer(0),
                             "The number of integration points over which we integrate the lithostatic pressure "
-                            "downwards. ");
+                            "downwards.");
         }
         prm.leave_subsection();
       }
@@ -340,7 +344,8 @@ namespace aspect
                                             "other geometries (radius, longitude, latitude), and "
                                             "the number of integration points. "
                                             "The lateral coordinates of the point are used to calculate "
-                                            "the lithostatic pressure profile with depth. "
+                                            "the lithostatic pressure profile with depth. This means that "
+                                            "the depth coordinate is not used."
                                             "\n\n"
                                             "Gravity is expected to point along the depth direction. ")
   }

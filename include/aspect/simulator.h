@@ -29,6 +29,8 @@
 
 DEAL_II_DISABLE_EXTRA_DIAGNOSTICS
 
+#include <deal.II/lac/affine_constraints.h>
+
 #include <deal.II/distributed/tria.h>
 
 #include <deal.II/dofs/dof_handler.h>
@@ -39,12 +41,6 @@ DEAL_II_DISABLE_EXTRA_DIAGNOSTICS
 #include <deal.II/base/tensor_function.h>
 
 DEAL_II_ENABLE_EXTRA_DIAGNOSTICS
-
-#if !DEAL_II_VERSION_GTE(9,1,0)
-#  include <deal.II/lac/constraint_matrix.h>
-#else
-#  include <deal.II/lac/affine_constraints.h>
-#endif
 
 #include <aspect/global.h>
 #include <aspect/simulator_access.h>
@@ -65,7 +61,7 @@ DEAL_II_ENABLE_EXTRA_DIAGNOSTICS
 #include <aspect/boundary_fluid_pressure/interface.h>
 #include <aspect/boundary_traction/interface.h>
 #include <aspect/mesh_refinement/interface.h>
-#include <aspect/termination_criteria/interface.h>
+#include <aspect/time_stepping/interface.h>
 #include <aspect/postprocess/interface.h>
 #include <aspect/adiabatic_conditions/interface.h>
 #include <aspect/particle/world.h>
@@ -77,18 +73,6 @@ DEAL_II_ENABLE_EXTRA_DIAGNOSTICS
 namespace aspect
 {
   using namespace dealii;
-
-#if DEAL_II_VERSION_GTE(9,1,0)
-  /**
-   * The ConstraintMatrix class was deprecated in deal.II 9.1 in favor
-   * of AffineConstraints. To make the name available for ASPECT
-   * nonetheless, use a `using` declaration. This injects the name
-   * into the `aspect` namespace, where it is visible before the
-   * deprecated name in the `dealii` namespace, thereby suppressing
-   * the deprecation message.
-   */
-  using ConstraintMatrix = class dealii::AffineConstraints<double>;
-#endif
 
   template <int dim>
   class MeltHandler;
@@ -223,12 +207,12 @@ namespace aspect
       /**
        * Import Nonlinear Solver type.
        */
-      typedef typename Parameters<dim>::NonlinearSolver NonlinearSolver;
+      using NonlinearSolver = typename Parameters<dim>::NonlinearSolver;
 
       /**
        * Import nullspace removal type.
        */
-      typedef typename Parameters<dim>::NullspaceRemoval NullspaceRemoval;
+      using NullspaceRemoval = typename Parameters<dim>::NullspaceRemoval;
 
 
       /**
@@ -458,14 +442,14 @@ namespace aspect
        * conditions that do not change over time. This function is used by
        * setup_dofs();
        */
-      void compute_initial_velocity_boundary_constraints (ConstraintMatrix &constraints);
+      void compute_initial_velocity_boundary_constraints (AffineConstraints<double> &constraints);
 
       /**
        * Fill the given @p constraints with constraints coming from the velocity boundary
        * conditions that do can change over time. This function is used by
        * compute_current_constraints().
        */
-      void compute_current_velocity_boundary_constraints (ConstraintMatrix &constraints);
+      void compute_current_velocity_boundary_constraints (AffineConstraints<double> &constraints);
 
       /**
        * Given the 'constraints' member that contains all constraints that are
@@ -596,6 +580,49 @@ namespace aspect
        * <code>source/simulator/solver_schemes.cc</code>.
        */
       void solve_single_advection_iterated_stokes ();
+
+      /**
+       * This function implements one scheme for the various
+       * steps necessary to assemble and solve the nonlinear problem.
+       *
+       * The `no Advection, iterated defect correction Stokes' scheme
+       * does not solve the temperature and composition equations
+       * but only iterates out the solution of the Stokes
+       * equation using Defect Correction (DC) Picard iterations.
+       *
+       * This function is implemented in
+       * <code>source/simulator/solver_schemes.cc</code>.
+       */
+      void solve_no_advection_iterated_defect_correction_stokes ();
+
+      /**
+       * This function implements one scheme for the various
+       * steps necessary to assemble and solve the nonlinear problem.
+       *
+       * The `single Advection, iterated defect correction Stokes' scheme
+       * solves the temperature and composition equations once at the beginning
+       * of each time step and then iterates out the solution of the Stokes
+       * equation using Defect Correction (DC) Picard iterations.
+       *
+       * This function is implemented in
+       * <code>source/simulator/solver_schemes.cc</code>.
+       */
+      void solve_single_advection_iterated_defect_correction_stokes ();
+
+      /**
+       * This function implements one scheme for the various
+       * steps necessary to assemble and solve the nonlinear problem.
+       *
+       * The `iterated Advection and defect correction Stokes' scheme
+       * iterates over both the temperature and composition equations
+       * and the Stokes equations at the same time. The Stokes equation
+       * is iterated out using the Defect Correction (DC) form of the
+       * Picard iterations.
+       *
+       * This function is implemented in
+       * <code>source/simulator/solver_schemes.cc</code>.
+       */
+      void solve_iterated_advection_and_defect_correction_stokes ();
 
       /**
        * This function implements one scheme for the various
@@ -744,7 +771,7 @@ namespace aspect
        * <code>source/simulator/solver_schemes.cc</code>.
        */
       void assemble_and_solve_defect_correction_Stokes(DefectCorrectionResiduals &dcr,
-                                                       bool use_picard);
+                                                       const bool use_picard);
 
       /**
        * Initiate the assembly of one advection matrix and right hand side and
@@ -1368,7 +1395,7 @@ namespace aspect
        * @note: Rotational modes are currently not handled and don't appear to
        * require constraints so far.
        */
-      void setup_nullspace_constraints(ConstraintMatrix &constraints);
+      void setup_nullspace_constraints(AffineConstraints<double> &constraints);
 
 
       /**
@@ -1483,14 +1510,14 @@ namespace aspect
       void maybe_write_timing_output () const;
 
       /**
-       * Check if a checkpoint should be written in this timestep. Is so create
+       * Check if a checkpoint should be written in this timestep. If so create
        * one. Returns whether a checkpoint was written.
        *
        * This function is implemented in
        * <code>source/simulator/helper_functions.cc</code>.
        */
       bool maybe_write_checkpoint (const time_t last_checkpoint_time,
-                                   const std::pair<bool,bool> termination_output);
+                                   const bool force_writing_checkpoint);
 
       /**
        * Check if we should do an initial refinement cycle in this timestep.
@@ -1520,18 +1547,6 @@ namespace aspect
        */
       void maybe_refine_mesh (const double new_time_step,
                               unsigned int &max_refinement_level);
-
-      /**
-       * Compute the size of the next time step from the mesh size and the
-       * velocity on each cell. The computed time step has to satisfy the CFL
-       * number chosen in the input parameter file on each cell of the mesh.
-       * If specified in the parameter file, the time step will be the minimum
-       * of the convection *and* conduction time steps.
-       *
-       * This function is implemented in
-       * <code>source/simulator/helper_functions.cc</code>.
-       */
-      double compute_time_step () const;
 
       /**
        * Advance the current time by the given @p step_size and update the
@@ -1752,8 +1767,8 @@ namespace aspect
        */
       std::ofstream log_file_stream;
 
-      typedef boost::iostreams::tee_device<std::ostream, std::ofstream> TeeDevice;
-      typedef boost::iostreams::stream< TeeDevice > TeeStream;
+      using TeeDevice = boost::iostreams::tee_device<std::ostream, std::ofstream>;
+      using TeeStream = boost::iostreams::stream< TeeDevice >;
 
       TeeDevice iostream_tee_device;
       TeeStream iostream_tee_stream;
@@ -1851,10 +1866,10 @@ namespace aspect
        */
 
       /**
-       * @name Variables related to simulation termination
+       * @name Variables related to simulation time stepping
        * @{
        */
-      TerminationCriteria::Manager<dim>                         termination_manager;
+      TimeStepping::Manager<dim>                                time_stepping_manager;
       /**
        * @}
        */
@@ -1906,8 +1921,8 @@ namespace aspect
        * 'constraints' is computed in setup_dofs(), 'current_constraints' is
        * done in compute_current_constraints().
        */
-      ConstraintMatrix                                          constraints;
-      ConstraintMatrix                                          current_constraints;
+      AffineConstraints<double>                                          constraints;
+      AffineConstraints<double>                                          current_constraints;
 
       /**
        * A place to store the latest correction computed by normalize_pressure().

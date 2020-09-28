@@ -256,9 +256,6 @@ namespace aspect
     }
 
 
-    // We still use the cell reference in the different constructors, although it is deprecated.
-    // Make sure we don't get any compiler warnings.
-    DEAL_II_DISABLE_EXTRA_DIAGNOSTICS
     template <int dim>
     MaterialModelInputs<dim>::MaterialModelInputs(const unsigned int n_points,
                                                   const unsigned int n_comp)
@@ -270,7 +267,6 @@ namespace aspect
       velocity(n_points, numbers::signaling_nan<Tensor<1,dim> >()),
       composition(n_points, std::vector<double>(n_comp, numbers::signaling_nan<double>())),
       strain_rate(n_points, numbers::signaling_nan<SymmetricTensor<2,dim> >()),
-      cell (nullptr),
       current_cell(),
       requested_properties(MaterialProperties::all_properties)
     {}
@@ -287,7 +283,6 @@ namespace aspect
       velocity(input_data.solution_values.size(), numbers::signaling_nan<Tensor<1,dim> >()),
       composition(input_data.solution_values.size(), std::vector<double>(introspection.n_compositional_fields, numbers::signaling_nan<double>())),
       strain_rate(input_data.solution_values.size(), numbers::signaling_nan<SymmetricTensor<2,dim> >()),
-      cell(&current_cell),
       current_cell(input_data.template get_cell<DoFHandler<dim> >()),
       requested_properties(MaterialProperties::all_properties)
     {
@@ -328,7 +323,6 @@ namespace aspect
       velocity(fe_values.n_quadrature_points, numbers::signaling_nan<Tensor<1,dim> >()),
       composition(fe_values.n_quadrature_points, std::vector<double>(introspection.n_compositional_fields, numbers::signaling_nan<double>())),
       strain_rate(fe_values.n_quadrature_points, numbers::signaling_nan<SymmetricTensor<2,dim> >()),
-      cell(cell_x.state() == IteratorState::valid ? &current_cell : nullptr),
       current_cell (cell_x),
       requested_properties(MaterialProperties::all_properties)
     {
@@ -348,7 +342,6 @@ namespace aspect
       velocity(source.velocity),
       composition(source.composition),
       strain_rate(source.strain_rate),
-      cell(source.cell),
       current_cell(source.current_cell),
       requested_properties(source.requested_properties)
     {
@@ -357,8 +350,6 @@ namespace aspect
                           "additional input objects attached"));
     }
 
-
-    DEAL_II_ENABLE_EXTRA_DIAGNOSTICS
 
 
     template <int dim>
@@ -392,10 +383,6 @@ namespace aspect
           for (unsigned int c=0; c<introspection.n_compositional_fields; ++c)
             this->composition[i][c] = composition_values[c][i];
         }
-
-      DEAL_II_DISABLE_EXTRA_DIAGNOSTICS
-      this->cell = cell_x.state() == IteratorState::valid ? &cell_x : nullptr;
-      DEAL_II_ENABLE_EXTRA_DIAGNOSTICS
 
       this->current_cell = cell_x;
     }
@@ -851,6 +838,17 @@ namespace aspect
 
     template <int dim>
     NamedAdditionalMaterialOutputs<dim>::
+    NamedAdditionalMaterialOutputs(const std::vector<std::string> &output_names,
+                                   const unsigned int n_points)
+      :
+      output_values(output_names.size(), std::vector<double>(n_points, numbers::signaling_nan<double>())),
+      names(output_names)
+    {}
+
+
+
+    template <int dim>
+    NamedAdditionalMaterialOutputs<dim>::
     ~NamedAdditionalMaterialOutputs()
     {}
 
@@ -861,6 +859,21 @@ namespace aspect
     NamedAdditionalMaterialOutputs<dim>::get_names() const
     {
       return names;
+    }
+
+
+
+    template<int dim>
+    std::vector<double>
+    NamedAdditionalMaterialOutputs<dim>::get_nth_output(const unsigned int idx) const
+    {
+      // In this function we extract the values for the nth output
+      // The number of outputs is the outer vector
+      Assert (output_values.size() > idx,
+              ExcMessage ("The requested output index is out of range for output_values."));
+      Assert (output_values[idx].size() > 0,
+              ExcMessage ("There must be one or more points for the nth output."));
+      return output_values[idx];
     }
 
 
@@ -1104,5 +1117,7 @@ namespace aspect
 
 
     ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
   }
 }

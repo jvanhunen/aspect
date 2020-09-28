@@ -22,6 +22,7 @@
 #include <aspect/simulator.h>
 #include <aspect/mesh_deformation/free_surface.h>
 #include <aspect/mesh_deformation/interface.h>
+#include <aspect/particle/world.h>
 
 namespace aspect
 {
@@ -668,7 +669,7 @@ namespace aspect
   }
 
   template <int dim>
-  const ConstraintMatrix &
+  const AffineConstraints<double> &
   SimulatorAccess<dim>::get_current_constraints() const
   {
     return simulator->current_constraints;
@@ -759,4 +760,6 @@ namespace aspect
   template class SimulatorAccess<dim>;
 
   ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
 }

@@ -26,7 +26,17 @@
 #include <aspect/material_model/utilities.h>
 
 #include <deal.II/base/point.h>
+
+// Work around an incorrect instantiation in qprojector.h of deal.II 9.2.0,
+// which requires including qprojector.h before quadrature.h (and not
+// after). This file doesn't actually need qprojector.h, so the include can be
+// removed when we require 9.3.. For more info see
+// https://github.com/geodynamics/aspect/issues/3728
+#if !DEAL_II_VERSION_GTE(9,3,0)
+#include <deal.II/base/qprojector.h>
+#endif
 #include <deal.II/base/quadrature.h>
+
 #include <deal.II/base/symmetric_tensor.h>
 #include <deal.II/base/parameter_handler.h>
 #include <deal.II/dofs/dof_handler.h>
@@ -386,20 +396,6 @@ namespace aspect
        * u^T) - \frac 13 \nabla \cdot \mathbf u \mathbf 1$.
        */
       std::vector<SymmetricTensor<2,dim> > strain_rate;
-
-      /**
-       * Optional reference to the cell that contains these quadrature
-       * points. This allows for evaluating properties at the cell vertices
-       * and interpolating to the quadrature points, or to query the cell for
-       * material ids, neighbors, or other information that is not available
-       * solely from the locations. Note that not all calling functions can set
-       * this reference. In these cases it will be a nullptr, so make sure
-       * that your material model either fails with a proper error message
-       * or provide an alternative calculation for these cases.
-       *
-       * @deprecated Use DoFHandler<dim>::active_cell_iterator current_cell instead.
-       */
-      const typename DoFHandler<dim>::active_cell_iterator *cell DEAL_II_DEPRECATED;
 
       /**
        * Optional cell object that contains these quadrature
@@ -842,7 +838,7 @@ namespace aspect
     {
       public:
         /**
-         * Constructor.
+         * Base constructor.
          *
          * @param output_names A list of names for the additional output variables
          *   this object will store. The length of the list also indicates
@@ -850,6 +846,19 @@ namespace aspect
          *   will store.
          */
         NamedAdditionalMaterialOutputs(const std::vector<std::string> &output_names);
+
+        /**
+         * Constructor for case where outputs are stored for a number of points.
+         *
+         * @param output_names A list of names for the additional output variables
+         *   this object will store. The length of the list also indicates
+         *   how many additional output variables objects of derived classes
+         *   will store.
+         * @param n_points The number of points for which to store each of the
+         *   output variables.
+         */
+        NamedAdditionalMaterialOutputs(const std::vector<std::string> &output_names,
+                                       const unsigned int n_points);
 
         /**
          * Destructor.
@@ -866,12 +875,19 @@ namespace aspect
          * Given an index as input argument, return a reference the to vector of
          * values of the additional output with that index.
          */
-        virtual std::vector<double> get_nth_output(const unsigned int idx) const = 0;
+        virtual std::vector<double> get_nth_output(const unsigned int idx) const;
 
         void average (const MaterialAveraging::AveragingOperation /*operation*/,
                       const FullMatrix<double>  &/*projection_matrix*/,
                       const FullMatrix<double>  &/*expansion_matrix*/) override
         {}
+
+
+        /**
+         * Values for the outputs at a set of evaluation points
+         * output_values[i][j] is the value of output i at point j.
+         */
+        std::vector<std::vector<double> > output_values;
 
       private:
         const std::vector<std::string> names;
@@ -924,7 +940,7 @@ namespace aspect
      *
      * In contrast to the reaction_terms, which are actual changes in composition
      * rather than reaction rates, and assume equilibrium between the compositional
-     * fields, the reacion_rates defined here allow for reaction processes that
+     * fields, the reaction_rates defined here allow for reaction processes that
      * happen on shorter time scales than the advection, and disequilibrium reactions.
      */
     template <int dim>
@@ -1159,14 +1175,14 @@ namespace aspect
          * measure given that the referenced structure used to be a member of
          * the current class.
          */
-        typedef MaterialModel::MaterialModelInputs<dim> MaterialModelInputs;
+        using MaterialModelInputs = MaterialModel::MaterialModelInputs<dim>;
         /**
          * A typedef to import the MaterialModelOutputs name into the current
          * class. This typedef primarily exists as a backward compatibility
          * measure given that the referenced structure used to be a member of
          * the current class.
          */
-        typedef MaterialModel::MaterialModelOutputs<dim> MaterialModelOutputs;
+        using MaterialModelOutputs = MaterialModel::MaterialModelOutputs<dim>;
 
         /**
          * Destructor. Made virtual to enforce that derived classes also have

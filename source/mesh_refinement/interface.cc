@@ -91,14 +91,11 @@ namespace aspect
       Assert (mesh_refinement_objects.size() > 0, ExcInternalError());
 
       // call the update() functions of all refinement plugins.
-      unsigned int index = 0;
-      for (typename std::list<std::unique_ptr<Interface<dim> > >::const_iterator
-           p = mesh_refinement_objects.begin();
-           p != mesh_refinement_objects.end(); ++p, ++index)
+      for (const auto &p : mesh_refinement_objects)
         {
           try
             {
-              (*p)->update ();
+              p->update ();
             }
 
           // plugins that throw exceptions usually do not result in
@@ -115,7 +112,7 @@ namespace aspect
               std::cerr << "Exception on MPI process <"
                         << Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)
                         << "> while running mesh refinement plugin <"
-                        << typeid(**p).name()
+                        << typeid(*p).name()
                         << ">: " << std::endl
                         << exc.what() << std::endl
                         << "Aborting!" << std::endl
@@ -133,7 +130,7 @@ namespace aspect
               std::cerr << "Exception on MPI process <"
                         << Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)
                         << "> while running mesh refinement plugin <"
-                        << typeid(**p).name()
+                        << typeid(*p).name()
                         << ">: " << std::endl;
               std::cerr << "Unknown exception!" << std::endl
                         << "Aborting!" << std::endl
@@ -266,14 +263,11 @@ namespace aspect
 
       // call the tag_additional_cells() functions of all
       // plugins we have here in turns.
-      unsigned int index = 0;
-      for (typename std::list<std::unique_ptr<Interface<dim> > >::const_iterator
-           p = mesh_refinement_objects.begin();
-           p != mesh_refinement_objects.end(); ++p, ++index)
+      for (const auto &p : mesh_refinement_objects)
         {
           try
             {
-              (*p)->tag_additional_cells ();
+              p->tag_additional_cells ();
             }
 
           // plugins that throw exceptions usually do not result in
@@ -290,7 +284,7 @@ namespace aspect
               std::cerr << "Exception on MPI process <"
                         << Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)
                         << "> while running mesh refinement plugin <"
-                        << typeid(**p).name()
+                        << typeid(*p).name()
                         << ">: " << std::endl
                         << exc.what() << std::endl
                         << "Aborting!" << std::endl
@@ -308,7 +302,7 @@ namespace aspect
               std::cerr << "Exception on MPI process <"
                         << Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)
                         << "> while running mesh refinement plugin <"
-                        << typeid(**p).name()
+                        << typeid(*p).name()
                         << ">: " << std::endl;
               std::cerr << "Unknown exception!" << std::endl
                         << "Aborting!" << std::endl
@@ -414,8 +408,8 @@ namespace aspect
                           "If multiple mesh refinement criteria are computed for each cell "
                           "(by passing a list of more than element to the \\texttt{Strategy} "
                           "parameter in this section of the input file) "
-                          "then one will have to decide which one should win when deciding "
-                          "which cell to refine. The operation that selects from these competing "
+                          "then one will have to decide which criteria should win when deciding "
+                          "which cells to refine. The operation that determines how to combine these competing "
                           "criteria is the one that is selected here. The options are:\n\n"
                           "\\begin{itemize}\n"
                           "\\item \\texttt{plus}: Add the various error indicators together and "
@@ -548,5 +542,7 @@ namespace aspect
   template class Manager<dim>;
 
     ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
   }
 }

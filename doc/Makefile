@@ -22,7 +22,7 @@ change-files = $(shell find modules/changes/ -type f -not -name '.*')
 aspect-doc-prms = $(shell find -L manual/cookbooks/ -path \*/doc/\* -name \*.prm 2>/dev/null)
 aspect-doc-prms-out = $(aspect-doc-prms:=.out)
 
-aspect-cookbook-prms = $(shell find -L manual/cookbooks/ -not -path \*/doc/\* -name \*.prm 2>/dev/null)
+aspect-cookbook-prms = $(shell find -L manual/cookbooks/ -not -path \*/doc/\* -not -path \*output\* -name \*.prm 2>/dev/null)
 aspect-cookbook-file-names = $(notdir $(aspect-cookbook-prms))
 aspect-cookbook-dir-names = $(dir $(aspect-cookbook-prms))
 aspect-cookbook-file-names-out = $(addsuffix .out, $(aspect-cookbook-file-names))
@@ -84,7 +84,7 @@ aspect.tag: $(aspect-files) $(change-files) modules/changes.h options.dox Makefi
 	  echo 'Cross-linking deal.II documentation from the ASPECT documentation' ; \
 	  echo 'TAGFILES = deal.tag=http://www.dealii.org/developer/doxygen/deal.II'          >> aspect.dox ; \
 	 fi
-	@echo 'IMAGE_PATH = manual'                                  >> aspect.dox
+	@echo 'IMAGE_PATH = logo manual'                             >> aspect.dox
 	@echo 'PROJECT_NAME = "ASPECT"'                              >> aspect.dox
 	@echo 'INPUT = $(aspect-files)'                              >> aspect.dox
 	@echo 'HTML_OUTPUT      = doxygen'                           >> aspect.dox

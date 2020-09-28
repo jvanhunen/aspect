@@ -31,8 +31,9 @@ namespace aspect
     namespace Interpolator
     {
       /**
-       * Return the interpolated properties of all particles of the given cell using bilinear least squares method.
-       * Currently, only the two dimensional model is supported.
+       * Evaluate the properties of all particles of the given cell
+       * using a least squares projection onto the set of bilinear
+       * (or, in 3d, trilinear) functions.
        *
        * @ingroup ParticleInterpolators
        */
@@ -69,9 +70,9 @@ namespace aspect
           /**
            * Variables related to a limiting scheme that prevents overshoot and
            * undershoot of interpolated particle properties based on global max
-           * and global min for each propery.
+           * and global min for each property.
            */
-          bool use_global_valued_limiter;
+          bool use_global_min_max_limiter;
 
           /**
            * For each interpolated particle property, a global max and global

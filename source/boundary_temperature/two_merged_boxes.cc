@@ -53,11 +53,8 @@ namespace aspect
       else
         {
           double min = maximal_temperature(fixed_boundary_ids);
-          for (typename std::set<types::boundary_id>::const_iterator
-               p = fixed_boundary_ids.begin();
-               p != fixed_boundary_ids.end(); ++p)
-            if (p != fixed_boundary_ids.end())
-              min = std::min(min,temperature_values[*p]);
+          for (const auto p : fixed_boundary_ids)
+            min = std::min(min,temperature_values[p]);
           return min;
         }
     }
@@ -74,11 +71,8 @@ namespace aspect
       else
         {
           double max = -std::numeric_limits<double>::max();
-          for (typename std::set<types::boundary_id>::const_iterator
-               p = fixed_boundary_ids.begin();
-               p != fixed_boundary_ids.end(); ++p)
-            if (p != fixed_boundary_ids.end())
-              max = std::max(max,temperature_values[*p]);
+          for (const auto p : fixed_boundary_ids)
+            max = std::max(max,temperature_values[p]);
           return max;
         }
     }
@@ -93,36 +87,36 @@ namespace aspect
         {
           prm.declare_entry ("Left temperature", "1.",
                              Patterns::Double (),
-                             "Temperature at the left boundary (at minimal $x$-value). Units: $\\si{K}$.");
+                             "Temperature at the left boundary (at minimal $x$-value). Units: \\si{\\kelvin}.");
           prm.declare_entry ("Right temperature", "0.",
                              Patterns::Double (),
-                             "Temperature at the right boundary (at maximal $x$-value). Units: $\\si{K}$.");
+                             "Temperature at the right boundary (at maximal $x$-value). Units: \\si{\\kelvin}.");
           prm.declare_entry ("Bottom temperature", "0.",
                              Patterns::Double (),
-                             "Temperature at the bottom boundary (at minimal $z$-value). Units: $\\si{K}$.");
+                             "Temperature at the bottom boundary (at minimal $z$-value). Units: \\si{\\kelvin}.");
           prm.declare_entry ("Top temperature", "0.",
                              Patterns::Double (),
-                             "Temperature at the top boundary (at maximal $x$-value). Units: $\\si{K}$.");
+                             "Temperature at the top boundary (at maximal $x$-value). Units: \\si{\\kelvin}.");
           prm.declare_entry ("Left temperature lithosphere", "0.",
                              Patterns::Double (),
-                             "Temperature at the additional left lithosphere boundary (specified by user in Geometry Model). Units: $\\si{K}$.");
+                             "Temperature at the additional left lithosphere boundary (specified by user in Geometry Model). Units: \\si{\\kelvin}.");
           prm.declare_entry ("Right temperature lithosphere", "0.",
                              Patterns::Double (),
-                             "Temperature at the additional right lithosphere boundary (specified by user in Geometry Model). Units: $\\si{K}$.");
+                             "Temperature at the additional right lithosphere boundary (specified by user in Geometry Model). Units: \\si{\\kelvin}.");
           if (dim==3)
             {
               prm.declare_entry ("Front temperature", "0.",
                                  Patterns::Double (),
-                                 "Temperature at the front boundary (at minimal $y$-value). Units: $\\si{K}$.");
+                                 "Temperature at the front boundary (at minimal $y$-value). Units: \\si{\\kelvin}.");
               prm.declare_entry ("Back temperature", "0.",
                                  Patterns::Double (),
-                                 "Temperature at the back boundary (at maximal $y$-value). Units: $\\si{K}$.");
+                                 "Temperature at the back boundary (at maximal $y$-value). Units: \\si{\\kelvin}.");
               prm.declare_entry ("Front temperature lithosphere", "0.",
                                  Patterns::Double (),
-                                 "Temperature at the additional front lithosphere boundary (at minimal $y$-value). Units: $\\si{K}$.");
+                                 "Temperature at the additional front lithosphere boundary (at minimal $y$-value). Units: \\si{\\kelvin}.");
               prm.declare_entry ("Back temperature lithosphere", "0.",
                                  Patterns::Double (),
-                                 "Temperature at the additional back lithosphere boundary (at maximal $y$-value). Units: $\\si{K}$.");
+                                 "Temperature at the additional back lithosphere boundary (at maximal $y$-value). Units: \\si{\\kelvin}.");
             }
         }
         prm.leave_subsection ();

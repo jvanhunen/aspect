@@ -1,4 +1,4 @@
-# This test checks wether the derivatives of the drucker prager
+# This test checks whether the derivatives of the drucker prager
 # material model are the same as the finite difference derivatives 
 # created by the drucker prager material model. Significantly, the
 # temperature, composition, pressure and strain rate values 
@@ -10,8 +10,7 @@ set Additional shared libraries = tests/libdrucker_prager_derivatives_2d.so
 set Dimension                              = 2
 set End time                               = 0
 set Use years in output instead of seconds = true
-set Nonlinear solver scheme                = iterated Advection and Newton Stokes
-set Max nonlinear iterations               = 0
+set Nonlinear solver scheme                = no Advection, no Stokes
 
 # Model geometry (100x100 km, 10 km spacing)
 subsection Geometry model
