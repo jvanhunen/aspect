@@ -120,7 +120,7 @@ namespace aspect
   template <int dim>
   void
   Simulator<dim>::
-  set_default_assemblers()
+  set_stokes_assemblers()
   {
     assemblers->stokes_preconditioner.push_back(std_cxx14::make_unique<aspect::Assemblers::StokesPreconditioner<dim> >());
     assemblers->stokes_system.push_back(std_cxx14::make_unique<aspect::Assemblers::StokesIncompressibleTerms<dim> >());
@@ -189,6 +189,13 @@ namespace aspect
       assemblers->stokes_system.push_back(
         std_cxx14::make_unique<aspect::Assemblers::StokesPressureRHSCompatibilityModification<dim> >());
 
+  }
+
+  template <int dim>
+  void
+  Simulator<dim>::
+  set_advection_assemblers()
+  {
     assemblers->advection_system.push_back(
       std_cxx14::make_unique<aspect::Assemblers::AdvectionSystem<dim> >());
 
@@ -201,11 +208,17 @@ namespace aspect
     if (parameters.use_discontinuous_temperature_discretization ||
         parameters.use_discontinuous_composition_discretization)
       {
+        const bool no_field_method = std::find(parameters.compositional_field_methods.begin(),
+                                               parameters.compositional_field_methods.end(),
+                                               Parameters<dim>::AdvectionFieldMethod::fem_field)
+                                     == parameters.compositional_field_methods.end();
+
         // TODO: This currently does not work in parallel, because the sparsity
         // pattern of the matrix does not seem to know about flux terms
         // across periodic faces of different levels. Fix this.
         AssertThrow(geometry_model->get_periodic_boundary_pairs().size() == 0 ||
                     Utilities::MPI::n_mpi_processes(mpi_communicator) == 1 ||
+                    no_field_method ||
                     (parameters.initial_adaptive_refinement == 0 &&
                      parameters.adaptive_refinement_interval == 0),
                     ExcMessage("Combining discontinuous elements with periodic boundaries and "
@@ -257,7 +270,8 @@ namespace aspect
     if (!parameters.include_melt_transport
         && !assemble_newton_stokes_system)
       {
-        set_default_assemblers();
+        set_advection_assemblers();
+        set_stokes_assemblers();
       }
     else if (parameters.include_melt_transport
              && !assemble_newton_stokes_system)
@@ -267,6 +281,7 @@ namespace aspect
     else if (!parameters.include_melt_transport
              && assemble_newton_stokes_system)
       {
+        set_advection_assemblers();
         newton_handler->set_assemblers(*assemblers);
       }
     else if (parameters.include_melt_transport

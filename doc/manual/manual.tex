@@ -1080,10 +1080,12 @@ Similarly, we can obtain averaging formulae for the other thermodynamic properti
   C_p &=& \sum_i x_i C_{pi}
 \end{eqnarray}
 
+
+
 \subsection{Dimensional or non-dimensionalized equations?}
 \label{sec:non-dimensional}
 
-Equations \eqref{eq:stokes-1}--\eqref{eq:temperature} are stated in the
+Equations \eqref{eq:stokes-1}--\eqref{eq:temperature} are stated in their
 physically correct form. One would usually interpret them in a way that the
 various coefficients such as the viscosity, density and thermal conductivity
 $\eta,\rho,\kappa$ are given in their correct physical units, typically
@@ -1674,7 +1676,38 @@ considering velocity, pressure and temperature, we will in the following omit
 the dependence on the compositional fields used in previous sections, though
 this dependence can easily be added back into the equations stated below. A
 detailed discussion of the approximations introduced below can also be found in \cite{STO01} and
-\cite{KLKLZTTK10}.
+\cite{KLKLZTTK10}; a theoretical and practical comparison of many of
+these formulations using \aspect{} can be found in
+\cite{gassmoller2020formulations}.
+
+\note{Historically, the mantle convection community has typically used
+  one or another of these simplified formulations for computer simulations
+  -- oftentimes the simplest of them, the Boussinesq Approximation
+  (BA) discussed in Section~\ref{sec:Boussinesq}. These kinds of
+  approximations are appropriate in many contexts; for example,
+  for crustal dynamics simulations, the hydrostatic pressures are
+  never high enough to lead to noticeable compression effects and as a
+  consequence the density really is more or less independent of the
+  pressure -- as assumed in several of the approximations below. Yet,
+  it is worth pointing out that many older publications showing
+  mantle convection simulations did not
+  rely on these approximations because they describe the physical
+  situation better than equations
+  \eqref{eq:stokes-1}--\eqref{eq:temperature}, but \textit{because
+    simulation technology did not allow for anything else at the
+    time}.
+
+  This has changed today, and \aspect{} implements more realistic
+  formulations as discussed in this section and in
+  Section~\ref{sec:choosing-a-formulation}. As a consequence, you
+  should evaluate which formulation is
+  appropriate for what you want to do. The fact that someone else in
+  the past used a simplified formulation does not mean that you should do
+  the same for a similar situation: it could just indicate that they
+  did not have the technology to use a more complete formulation at the
+  time.
+  }
+
 
 The three approximations mentioned all start by writing the pressure and
 temperature as the sum of a (possibly depth dependent)
@@ -2073,12 +2106,22 @@ from previous time steps), or using a nonlinear solver scheme.
   ``isothermal compression'' for historical reasons, but the compressibility can be
   either isentropic or isothermal.}
 
+
+
 \subsection{Choosing a formulation in \aspect{}}
+\label{sec:choosing-a-formulation}
 
 After discussing different reasonable approximations for modeling compressible or
 incompressible mantle convection, we will now describe the different steps one has
-to take to use one of these approximations in a computation.
-This includes
+to take to use one of these approximations in a computation. As noted
+towards the beginning of Section~\ref{sec:approximate-equations}, one
+should choose a formulation that is adequate for the situation one
+wants to simulate, taking into account that other authors in previous
+studies may have used formulations not because they were suited to the
+situation but also because, possibly, they did not have software
+available that implemented the most suitable formulation.
+
+The choices involved in selecting a formulation include:
 \begin{enumerate}
 \item Choosing an approximation for the mass conservation equation;
 \item Choosing an approximation for the density in the energy balance, and deciding which heating terms should be included;
@@ -2734,6 +2777,68 @@ this end, see in particular Section~\ref{sec:cookbooks-particles}. All
 particle-related input parameters are listed in
 Section~\ref{parameters:Postprocess/Particles}. The implementation of particles is
 discussed in great detail in \cite{gassmoeller_particles}.
+
+
+
+\subsection{Geometric Multigrid}
+\label{sec:gmg}
+
+\aspect{} can optionally use a Geometric Multigrid Solver (GMG) for the efficient solution
+of the Stokes system (velocity and pressure). When used correctly, this can
+reduce the compute time spent in the solver by about a factor of 3,
+and decrease the memory requirements by a factor of 10.
+For more details
+about the method see~\cite{clevenger_stokes19,clevenger_par_gmg}.
+
+To take advantage of the GMG solver, you need to:
+\begin{enumerate}
+ \item Enable it in your parameter file, namely:
+\lstinputlisting[language=prmfile]{cookbooks/overview/doc/gmg-enable.part.prm.out}
+  See~\ref{parameters:Solver_20parameters/Stokes_20solver_20parameters} for other
+  parameters that influence the solver behavior.
+
+\item
+  \index[prmindex]{Material averaging}
+  \index[prmindexfull]{Material model!Material averaging}
+  The GMG solver requires that the viscosity is averaged, either as a constant (for example by using harmonic averaging)
+  or as a $Q_1$ averaging. (See Section~\ref{sec:sinker-with-averaging}
+  for more about averaging.) Averaging other properties is optional. You can
+  use 
+\lstinputlisting[language=prmfile]{cookbooks/overview/doc/gmg-average.part.prm.out}
+for example. Note that $Q_1$ averaging is a bit slower than averaging to a constant per cell, but it
+might provide more accurate solutions.
+
+\item Run in release mode. The GMG solver depends on running optimized code, so using optimized mode
+is more important than for other parts of ASPECT to get good
+performance. (Of course, the GMG solver also runs in debug mode, and
+you should do so while setting up a model. You will just not get the
+same speedup from the non-GMG to the GMG solver in debug mode as you
+get in release mode.)
+
+\item Enable vectorization optimizations. The GMG solver takes advantage of special instructions (AVX2, AVX512)
+in modern CPUs and requires these do be enabled when compiling \dealii{}. This can be achieved by passing the
+compiler flag \texttt{CMAKE\_CXX\_FLAGS='-march=native'} to CMake or setting \texttt{NATIVE\_OPTIMIZATIONS=true} in \texttt{candi.cfg} when using candi (see~\ref{sec:installation} for more information).
+When you have vectorization enabled, ASPECT will report something like
+this:
+\begin{lstlisting}[frame=single,language=ksh]
+-----------------------------------------------------------------------------
+-- This is ASPECT, the Advanced Solver for Problems in Earth's ConvecTion.
+--     . version 2.3.0-pre
+--     . using deal.II 9.2.0
+--     .       with 64 bit indices and vectorization level 3 (512 bits)
+--     . using Trilinos 12.10.1
+--     . using p4est 2.2.0
+--     . running in OPTIMIZED mode
+--     . running with 114688 MPI processes
+-----------------------------------------------------------------------------
+
+Vectorization over 8 doubles = 512 bits (AVX512), VECTORIZATION_LEVEL=3
+\end{lstlisting}
+Without optimizations enabled, the output will be ``and vectorization
+level 1 (128 bits)'' in the fourth line above.
+\end{enumerate}
+
+
 
 
 \section{Installation}
@@ -7335,6 +7440,44 @@ We can observe that when the two-layer viscosity model is added, there is only o
 \textit{This section is a co-production of Jonathan Robey and E. G. Puckett.}
 
 \input{cookbooks/van-keken-vof/doc/van-keken-vof.tex}
+
+
+\subsubsection{The Bunge et al.~mantle convection experiments}
+\label{sec:bunge_et_al_cookbook}
+
+\textit{This section was contributed by Cedric Thieulot and Bob Myhill.}
+
+Early mantle modelling studies of the 1970s, 1980s and 1990s were often concerned with simple set-ups (Cartesian geometries, incompressible fluid, free slip boundary conditions) and investigated the influence of the Rayleigh number, the heating mode or the temperature dependence of the viscosity on temperature, pressure and/or strain rate \cite{youn74,buss75,buss79,BBC89,BC93,vavy93,burb97}. In this cookbook, we use the `simple' material model to reproduce the set-up in \cite{burb96}, which reported that even modest increases in mantle viscosity with depth could have a marked effect on the style of mantle convection. The prm file corresponding to this cookbook can be found at \url{cookbooks/bunge_et_al_mantle_convection/bunge_et_al.prm}.
+
+Although the original article showcases results obtained in a 3D hollow sphere, we here run the models in an annular domain of inner radius $R_i = 3480$ \si{\kilo\meter} and outer radius  $R_o = 6370$ \si{\kilo\meter}.
+The surface temperature is set to $T{\textsubscript{surf}}$ = 1060 \si{\kelvin} and 
+the bottom temperature to $T{\textsubscript{cmb}} = 3450$ \si{\kelvin}. The gravity vector is radial and its magnitude is $g = 10$ \si{\metre\per\second\squared}.
+
+There is a single incompressible fluid in the domain, characterized by $\rho_0 = 4500$ \si{\kilogram\per\metre\cubed}, $\alpha = 2.5\cdot10^{-5}$ \si{\per\kelvin}, 
+$k = 4$ \si{\watt\per\metre\per\kelvin},
+$C_p = 1000$ \si{\joule\per\kilogram\per\kelvin} and
+its internal heating rate is $Q{\textsubscript{int}} = 1\cdot10^{-12}$ \si{\watt\per\kilogram}.
+The interface between the upper mantle (viscosity $\eta\textsubscript{um}$)
+and the lower mantle (viscosity $\eta\textsubscript{lm}$) is fixed at 670 \si{\kilo\meter} depth.
+As in the article we consider four time-independent radial viscosity profiles:
+
+\begin{itemize}
+\item[a)] Isoviscous mantle: $\eta\textsubscript{um}=\eta\textsubscript{lm}=1.7\cdot 10^{24}$ \si{\pascal\second}
+\item[b)] Mantle with step change in viscosity: $\eta\textsubscript{um}=5.8\cdot 10^{22}$ \si{\pascal\second}, $\eta\textsubscript{lm}=30\eta\textsubscript{um}$
+\item[c)] Isoviscous mantle: $\eta\textsubscript{um}=\eta\textsubscript{lm}=5.8\cdot 10^{22}$ \si{\pascal\second}
+\item[d)] Mantle with step change in viscosity: $\eta\textsubscript{um}=7\cdot 10^{21}$ \si{\pascal\second},  $\eta\textsubscript{lm}=30\eta\textsubscript{um}$
+\end{itemize}
+
+Separate ascii files {\tt visc\_depth\_X.txt} with {\tt X=\{a,b,c,d\}} contain each of these viscosity profiles. The resulting temperature fields after 5 billion years of convection are shown in Fig.~\ref{fig:bunge_et_al}. Similar to the results obtained by \cite{burb96}, models in which the lower mantle is more viscous than the upper mantle are distinctly colder than their isoviscous equivalents, with more clearly defined upwellings. You can find a movie of how the temperature evolves over this time period at
+\url{https://youtu.be/5SPCU1sFGGc}.
+
+\begin{figure}[tbp]
+  \centering
+  \includegraphics[width=0.9\textwidth]{cookbooks/bunge_et_al_mantle_convection/temps.png}
+  \caption{\it Bunge et al.~benchmark. From left to right: temperature field at time $t=5\cdot 10^9$ years obtained with viscosity profiles a, b, c and d.}
+  \label{fig:bunge_et_al}
+\end{figure}
+
 
 \subsubsection{The Rayleigh-Taylor instability}
 \label{sec:benchmark-rayleigh-taylor}
